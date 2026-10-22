@@ -1,0 +1,49 @@
+{
+  "category": "kits",
+  "dependencies": {
+    "just_game_engine_editor": "^0.1.0-dev.1"
+  },
+  "editor": {
+    "editorOnlyLibraries": [
+      "editor.dart",
+      "src/editor/"
+    ],
+    "modules": [
+      {
+        "class": "WorldBuilderModule",
+        "library": "package:just_world_builder_kit/editor.dart",
+        "order": 12
+      }
+    ]
+  },
+  "id": "just_world_builder_kit",
+  "kind": "kit",
+  "name": "World Builder Kit",
+  "requires": {
+    "just_game_engine": "^2.0.0"
+  },
+  "runtime": {
+    "componentTypes": [
+      "GridTiles3D",
+      "PathFollower3D",
+      "Scatter3D",
+      "Spline3D",
+      "SplineInstances3D",
+      "SplineSweep3D",
+      "Terrain3D"
+    ],
+    "extensions": [
+      {
+        "const": "WorldBuilderKit.extension",
+        "library": "package:just_world_builder_kit/just_world_builder_kit.dart",
+        "order": 20
+      }
+    ],
+    "setup": {
+      "file": "lib/game/third_person_game.dart",
+      "snippet": "// The kit's pieces are 3-D: EngineConfig(graphics3D: Graphics3D(),\n// physics3D: Physics3D()).\n...WorldBuilderKit.systems(),"
+    }
+  },
+  "schema": 1,
+  "version": "0.1.0-dev"
+}

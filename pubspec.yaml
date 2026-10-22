@@ -1,0 +1,36 @@
+name: just_world_builder_kit
+description: "World building for just_game_engine in 3D: blockout, splines, 3D grid tiles, terrain and scatter, with the Level Designer tools that make them."
+version: 0.1.0-dev
+publish_to: none
+homepage: https://engine.justunknown.com/
+
+environment:
+  sdk: ^3.12.2
+  flutter: ">=3.41.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # The engine: the 3-D shapes blockout makes, and what the kit's own
+  # pieces (splines, terrain, tiles, scatter) draw and collide with.
+  just_game_engine: ^2.0.0
+  # Grid tiles' cells, packed small in the scene file.
+  just_deflate: ^0.1.0
+  # The tools' settings, as the editor's own widgets watch them.
+  just_signals: ^1.0.2
+
+  # Design-time only: `lib/editor.dart` and `lib/src/editor/` (the Level
+  # Designer's World Builder tools). The runtime library never imports
+  # them, so a release build never reaches the editor — the kits'
+  # arrangement.
+  just_editor_core: ^0.1.0-dev.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  # The tests drive the tools through a real Level Designer session.
+  just_game_engine_editor: ^0.1.0-dev.1
+
+flutter:
+  uses-material-design: true
