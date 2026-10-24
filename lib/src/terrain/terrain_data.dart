@@ -55,6 +55,10 @@ final class TerrainData {
 
   final Uint32List _blockRevisions;
 
+  /// Equal only to itself: what keys made from this ground hold, instead
+  /// of the ground and its arrays.
+  final Object identity = Object();
+
   /// Bumped on every change: what draws it.
   int revision = 0;
 
@@ -219,9 +223,11 @@ final class TerrainData {
     if (version > _version) throw FormatException('Terrain version $version is newer than this engine reads ($_version)');
     final resolution = head.getUint16(6, Endian.little);
     final n = resolution * resolution;
-    final body = _zlib.decode(Uint8List.sublistView(bytes, 8));
     final holeBytes = (n + 7) >> 3;
-    if (resolution < 2 || body.length != n * 4 + n * 4 + holeBytes) {
+    if (resolution < 2) throw const FormatException('A terrain\'s samples do not add up');
+    // Never more than the header says: a damaged file fails at once.
+    final body = _zlib.decode(Uint8List.sublistView(bytes, 8), maxOutputSize: n * 8 + holeBytes);
+    if (body.length != n * 4 + n * 4 + holeBytes) {
       throw const FormatException('A terrain\'s samples do not add up');
     }
     // Copied: a view into the body may not be aligned for floats.

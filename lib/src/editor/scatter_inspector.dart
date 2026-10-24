@@ -3,7 +3,7 @@ import 'package:just_editor_core/just_editor_core.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
 import '../scatter/scatter_components.dart';
-import 'scatter_tools.dart' show scatterCollisionLabel, scatterCounts;
+import 'scatter_tools.dart' show removeScatterLayer, scatterCollisionLabel, scatterCounts;
 
 /// The inspector's editor for a [Scatter3D]'s layers: a card for each —
 /// its colour, name and pieces on top, its settings inside — and Add a
@@ -163,11 +163,13 @@ class _ScatterLayersEditorState extends State<_ScatterLayersEditor> {
                           '${i < counts.length ? counts[i] : 0} pieces · ${scatterCollisionLabel(l.collision).toLowerCase()}',
                           style: InspectorField.valueStyle.copyWith(color: EditorTheme.textMuted),
                         ),
-                        if (!_c.readOnly)
+                        if (!_c.readOnly && _c.scope != null && scatter != null)
                           EditorIconButton(
                             icon: Icons.delete_outline,
-                            tooltip: 'Remove this layer (its pieces stay until cleared)',
-                            onTap: () => _c.onChanged([for (final (k, x) in layers.indexed) if (k != i) x.copy()]),
+                            tooltip: 'Remove this layer and its pieces',
+                            // The pieces too: the layers after it move up one,
+                            // and their pieces with them.
+                            onTap: () => removeScatterLayer(_c.scope!, scatter, i),
                           ),
                       ],
                     ),

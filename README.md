@@ -13,8 +13,10 @@ draws them, what makes them solid and the files they keep.
 | Terrain | `Terrain3D` + a `.jterrain` file | in chunks, rebuilt only where it changed | a height field, holes and all |
 | Scatter | `Scatter3D` | batches per layer and square, not drawn far off | opt-in boxes or capsules per layer |
 
-Every piece is solid through a `Collider3D` set to **Match shape** on a static
-body (a platform on a route: a kinematic one). +Y is down in the engine:
+What is solid is solid through a `Collider3D` set to **Match shape** on a
+static body (a platform on a route: a kinematic one); the editor's tools add
+both. Scatter layers are solid only where they say so, and copies along a
+spline (`SplineInstances3D`) are only drawn. +Y is down in the engine:
 heights are measured up, towards −Y.
 
 ## The pieces
@@ -29,12 +31,16 @@ heights are measured up, towards −Y.
   metres (`SplineInstances3D`, which the editor can bake into entities), or
   move an entity along it with `PathFollower3D` — loop, back and forth, or
   once, resting at the ends. A kinematic body on a route carries whoever
-  stands on it.
+  stands on it. Looping an open spline jumps back to its start, and that
+  jump flings whoever rides it: give a ridden loop a closed spline, or go
+  back and forth.
 - **Grid tiles.** A mesh library lists pieces — a model, or one of the
   engine's shapes — sized to its cells, each solid as its cell, as its own
-  shape, or not at all. A `GridTiles3D` holds which piece is in each cell and
-  how it is turned (any of the 24 quarter turns of a cube), packed small in
-  the scene.
+  shape, or not at all (a new library's floors and walls are solid as their
+  slabs). A piece's number is never given to another, so tiles of a piece
+  taken out stay empty. A `GridTiles3D` holds which piece is in each cell
+  and how it is turned (any of the 24 quarter turns of a cube), packed small
+  in the scene.
 - **Terrain.** A `Terrain3D` is ground shaped by hand: heights, four layers'
   weights and holes, kept in a `.jterrain` file beside the scene. It shows the
   four layers of a layered material file, or four colours. Its collision is
@@ -57,11 +63,24 @@ final engine = Engine(config: EngineConfig(
 ));
 await engine.initialize();
 WorldBuilderKit.registerSystems(engine.world);
+
+await SceneLoader.loadAsset(engine.world, 'assets/scenes/level_01.scene.json');
+// The level's terrains and tile libraries read: solid from the first step.
+await WorldBuilderKit.ready(engine.world);
+engine.start();
 ```
+
+(A game that lists its systems itself adds `...WorldBuilderKit.systems()` to
+the list instead of calling `registerSystems`.)
 
 The systems tie sweeps, tiles and terrains to their splines and files before
 physics runs — so they are solid even where nothing draws them — and move
 path followers.
+
+`WorldBuilderKit.ready(world)` reads the files a level's terrains and tiles
+use, and lets go of those the last level used. Await it after loading each
+level, before the game runs: without it the files are read in the background
+once the game runs, and the ground is not solid until they arrive.
 
 List the folders the kit's files live in among the game's assets, as a
 scene uses them: `assets/tiles/`, `assets/terrain/<scene>/`.
@@ -72,7 +91,7 @@ Add `WorldBuilderModule()` from `package:just_world_builder_kit/editor.dart`
 to the editor's modules (the generated `storeModules()` does this). It
 appears as **World Builder** in the Level Designer's switch in 3-D scenes:
 
-- **BLOCKOUT**: Block, Floor, Ramp.
+- **BLOCKOUT**: Block, Floor, Ramp — each solid as it is made.
 - **SPLINES**: Spline — click points along any surface; Enter, a double-click
   or the first point finishes. It makes a path, a road, a wall, a pipe, a
   rail, posts, or a platform with its route. Drag a selected spline's points,
@@ -80,12 +99,14 @@ appears as **World Builder** in the Level Designer's switch in 3-D scenes:
   The inspector lays the rest of the selection along a spline, and bakes
   copies into entities.
 - **TILES**: Tiles — paint, erase, fill a box; on the floor level (Page Up /
-  Page Down) or stacked on what is under the pointer; Z turns the piece, X
-  and C tip it, Shift the other way; Alt-click picks one up. The Tiles panel
-  chooses the library and the piece and makes a new library; a library opens
-  in its own workspace.
+  Page Down) or stacked on what is under the pointer — a drag stays on the
+  level it began on; Z turns the piece, X and C tip it, Shift the other way;
+  Alt-click picks one up. Selected tiles are painted from their own library.
+  The Tiles panel chooses the library and the piece and makes a new library;
+  a library opens in its own workspace.
 - **TERRAIN**: Terrain — raise, lower, smooth, flatten, roughen, paint a
-  layer, cut holes; Shift the other way, `[` `]` the brush's size. The
+  layer, cut holes; Shift lowers what raises and fills holes back, `[` `]`
+  the brush's size. The
   Terrain panel names the terrain being shaped, holds the brush (what it
   does, its size and strength, the layer it paints), makes a new terrain
   (its size, and its detail: coarse, medium or fine) and gives a shared one

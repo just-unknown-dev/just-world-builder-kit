@@ -2,7 +2,7 @@
 // row of copies, where their entity is, built again when the spline
 // changes.
 import 'dart:math' as math;
-import 'dart:ui' show Size;
+import 'dart:ui' show Color, Size;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_game_engine/graphics_3d.dart';
@@ -63,5 +63,30 @@ void main() {
     expect(renderer.scene.batches.single.count, 11);
     final sweep = renderer.scene.instances.single;
     expect(sweep.primitive.bounds.max.x - sweep.primitive.bounds.min.x, closeTo(20, 1e-4), reason: 'swept again');
+  });
+
+  test('a spline put in another\'s place is followed, though no system runs', () {
+    final e = road(copies: SplineInstances3D(spacing: 2));
+    final renderer = service.sceneRenderer..update(view);
+    expect(renderer.scene.batches.single.count, 6);
+    // Taken off and another put on — as an undone removal does.
+    e.removeComponent<Spline3D>();
+    e.addComponent(Spline3D(points: [SplinePoint(position: Vector3.zero()), SplinePoint(position: Vector3(30, 0, 0))]));
+    renderer.update(view);
+    final sweep = renderer.scene.instances.single;
+    expect(sweep.primitive.bounds.max.x - sweep.primitive.bounds.min.x, closeTo(30, 1e-4), reason: 'swept along the new one');
+    expect(renderer.scene.batches.single.count, 16);
+  });
+
+  test('plain colours\' materials: only the last ones drawn are kept', () {
+    final e = road();
+    final renderer = service.sceneRenderer..update(view);
+    final sweep = e.getComponent<SplineSweep3D>()!;
+    final provider = RenderProviders.of(engine.world.context).forType(SplineSweep3D)! as SweepRenderProvider;
+    for (var k = 0; k < SweepRenderProvider.colourLimit + 30; k++) {
+      sweep.color = Color(0xFF000000 | (k * 997));
+      renderer.update(view);
+    }
+    expect(provider.colourCount, SweepRenderProvider.colourLimit);
   });
 }

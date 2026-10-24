@@ -51,7 +51,7 @@
     ],
     "setup": {
       "file": "lib/game/third_person_game.dart",
-      "snippet": "// The kit's pieces are 3-D: EngineConfig(graphics3D: Graphics3D(),\n// physics3D: Physics3D()).\n...WorldBuilderKit.systems(),"
+      "snippet": "// The kit's pieces are 3-D: EngineConfig(graphics3D: Graphics3D(),\n// physics3D: Physics3D()).\nWorldBuilderKit.registerSystems(engine.world);\n// After each level is loaded, before the game runs: its terrains and\n// tile libraries read, so they are solid from the first step.\nawait SceneLoader.loadAsset(engine.world, level);\nawait WorldBuilderKit.ready(engine.world);"
     }
   },
   "schema": 1,
@@ -62,5 +62,5 @@
     "level design",
     "terrain"
   ],
-  "version": "0.1.0"
+  "version": "0.1.0-beta.1"
 }

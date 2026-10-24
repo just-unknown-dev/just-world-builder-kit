@@ -9,6 +9,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:just_deflate/just_deflate.dart';
 import 'package:just_game_engine/graphics_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 import 'package:just_game_engine_editor/just_game_engine_editor.dart';
@@ -50,6 +51,11 @@ void main() {
       expect(() => TerrainData.decode(Uint8List.fromList([1, 2, 3, 4, 5, 6, 7, 8, 9])), throwsFormatException);
       final newer = data.encode()..[4] = 9;
       expect(() => TerrainData.decode(newer), throwsFormatException);
+      // A body that unpacks to more than its header says: refused as it
+      // unpacks.
+      final head = Uint8List.fromList(data.encode().sublist(0, 8))..[6] = 3..[7] = 0;
+      final big = Uint8List.fromList([...head, ...const ZlibCodec().encode(Uint8List(100000))]);
+      expect(() => TerrainData.decode(big), throwsFormatException);
     });
 
     test('heights between samples', () {
@@ -151,11 +157,27 @@ void main() {
       expect([v[12], v[13], v[14]], [closeTo(r, 1e-6), closeTo(g, 1e-6), closeTo(b, 1e-6)]);
     });
 
-    test('a hole takes the cells round it out; layered keeps the weights', () {
+    test('a hole takes the triangles round it out, as its height field does; layered keeps the weights', () {
       final data = TerrainData(9)..setHole(2, 2, true);
       final mesh = TerrainMesher.chunk(data, cx: 0, cz: 0, chunkCells: 4, size: 8);
-      expect(mesh.triangleCount, 32 - 8);
+      // The six triangles that have the hole for a corner — the height
+      // field (Jolt's) leaves out just those: no ground drawn missing
+      // where it is solid.
+      expect(mesh.triangleCount, 32 - 6);
+      const hole = 2 * 5 + 2;
+      expect(mesh.indices, isNot(contains(hole)));
       expect(mesh.vertices[12], 1, reason: 'layer 1 all of it');
+    });
+
+    test('picked through a hole only where no ground is drawn', () {
+      // 9 samples a metre apart, from -4: sample (i, j) at x = i - 4.
+      final terrain = Terrain3D(size: 8)..loaded = (TerrainData(9)..setHole(2, 2, true));
+      RayTriangleHit? down(double i, double j) =>
+          WorldBuilderRayTest.groundHit(terrain, Vector3(i - 4, -5, j - 4), Vector3(0, 1, 0));
+      expect(down(2.8, 2.8), isNotNull, reason: 'the far triangle of its cell has no hole corner');
+      expect(down(2.2, 2.2), isNull, reason: 'the near one has');
+      expect(down(2.6, 1.6), isNull, reason: 'both of that cell have the hole for a corner');
+      expect(down(5.5, 5.5), isNotNull);
     });
 
     test('solid as a height field, holes and all; built again once settled', () {
@@ -218,6 +240,52 @@ void main() {
       final second = [for (final m in renderer.scene.instances) m.primitive];
       expect(second, hasLength(4));
       expect([for (var k = 0; k < 4; k++) identical(first[k], second[k])].where((same) => same), hasLength(3));
+      // Smaller chunks, then bigger: what it keeps is what it draws.
+      final provider = RenderProviders.of(engine.world.context).forType(Terrain3D)! as TerrainRenderProvider;
+      final t = engine.world.query([Terrain3D]).single.getComponent<Terrain3D>()!;
+      t.chunkCells = 8;
+      renderer.update(view);
+      expect(provider.chunksKept(data), 64);
+      t.chunkCells = 32;
+      renderer.update(view);
+      expect(provider.chunksKept(data), 4);
+    });
+
+    test('terrains on one file and of one size are one solid; any other is its own', () {
+      final shared = TerrainData(9);
+      final a = Terrain3D(size: 16)..loaded = shared;
+      final b = Terrain3D(size: 16)..loaded = shared;
+      final c = Terrain3D(size: 16)..loaded = TerrainData(9);
+      expect(a.solidKey, b.solidKey);
+      expect(a.solidKey, isNot(c.solidKey));
+      shared.settle();
+      expect(a.solidKey, b.solidKey);
+      expect(a.solidKey, isNot((Terrain3D(size: 32)..loaded = shared).solidKey));
+    });
+
+    test('ready: a level\'s files read before it runs — solid at once — and the last one\'s let go', () async {
+      final world = World()..initialize();
+      Graphics3D.registerSchemas(world.context);
+      WorldBuilderKit.install(world.context);
+      final files = TerrainFiles.of(world.context)..read = (path) async => _bumpy(17).encode();
+      await files.load('assets/terrain/old.jterrain');
+      final library = MeshLibrary.starter(world.context.definitions).encode();
+      world.context.tiles.readText = (path) async => library;
+      final terrain = Terrain3D(data: 'assets/terrain/new.jterrain', size: 32);
+      final tiles = GridTiles3D(library: 'assets/tiles/blocks.meshlib.json')..setTile(0, -1, 0, 2);
+      world
+        ..createEntityWithComponents([TransformComponent(), terrain])
+        ..createEntityWithComponents([TransformComponent(), tiles]);
+      await WorldBuilderKit.ready(world);
+      expect(terrain.loaded, isNotNull);
+      expect(terrain.solidParts.single, isA<SolidHeightField>(), reason: 'before any step');
+      expect(tiles.loaded, isNotNull);
+      expect(tiles.solidParts, isNotEmpty);
+      expect(files.knows('assets/terrain/old.jterrain'), isFalse, reason: 'no terrain uses it now');
+      // Changes not written are never let go.
+      files.put('assets/terrain/draft.jterrain', TerrainData(9));
+      files.releaseUnused(const []);
+      expect(files.get('assets/terrain/draft.jterrain'), isNotNull);
     });
   });
 
@@ -329,6 +397,44 @@ void main() {
       expect(identical(files.get(own), files.get(t.data)), isFalse);
       scope.history.undo();
       expect(twin.getComponent<Terrain3D>()!.data, t.data);
+    });
+
+    test('a terrain made unique keeps its copy once the disk has been looked at', () async {
+      final first = terrain();
+      final t = first.getComponent<Terrain3D>()!;
+      final twin = scope.world.createEntityWithComponents([TransformComponent(), Terrain3D(data: t.data, size: 32)], name: 'Twin');
+      scope.sceneState.registerEntity(twin);
+      final files = TerrainFiles.of(scope.context);
+      twin.getComponent<Terrain3D>()!.link(files);
+      // A file of the first free name on disk already: passed over.
+      File('${root.path}/assets/terrain/level/Twin_2.jterrain')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(TerrainData(9).encode());
+      makeTerrainUnique(scope, twin, sceneName: 'level', root: root.path);
+      final own = twin.getComponent<Terrain3D>()!.data;
+      expect(own, 'assets/terrain/level/Twin_3.jterrain');
+      final copy = files.get(own);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(files.get(own), isNotNull);
+      expect(identical(files.get(own), copy), isTrue, reason: 'no read came back over it');
+      final failed = await scope.modules.notifySceneSaving('level');
+      expect(failed, isEmpty);
+      expect(File('${root.path}/$own').existsSync(), isTrue, reason: 'written with the scene');
+    });
+
+    test('ground put while its file is read is kept', () async {
+      final files = TerrainFiles.of(scope.context)
+        ..read = (path) async {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          throw const FileSystemException('not there');
+        };
+      const path = 'assets/terrain/level/late.jterrain';
+      expect(files.get(path), isNull, reason: 'reading');
+      final put = TerrainData(9);
+      files.put(path, put);
+      await files.load(path);
+      expect(identical(files.get(path), put), isTrue);
+      expect(files.errorOf(path), isNull);
     });
   });
 }

@@ -43,14 +43,13 @@ final class GridTilePreview {
 }
 
 /// A stroke of the Tiles tool: cells as they were and as they became, on
-/// the [GridTiles3D] of the entity named [entityName] — found again by
-/// name, so it outlives the entity being rebuilt.
+/// the [GridTiles3D] of [entity] — found again as the editor finds an
+/// entity rebuilt (`EditorSceneState.liveEntity`), whatever it is named.
 class GridTileStrokeCommand extends EditorCommand {
   GridTileStrokeCommand({
     required this.label,
-    required this.world,
     required this.sceneState,
-    required this.entityName,
+    required this.entity,
     required this.before,
     required this.after,
   });
@@ -58,19 +57,15 @@ class GridTileStrokeCommand extends EditorCommand {
   @override
   final String label;
 
-  final World world;
   final EditorSceneState sceneState;
-  final String entityName;
+
+  /// The entity painted, as it was when the stroke was made.
+  final Entity entity;
 
   /// Cell key to packed tile, or null for empty: before, and after.
   final Map<int, int?> before, after;
 
-  GridTiles3D? get _tiles {
-    for (final e in world.entities) {
-      if (e.name == entityName) return e.getComponent<GridTiles3D>();
-    }
-    return null;
-  }
+  GridTiles3D? get _tiles => sceneState.liveEntity(entity)?.getComponent<GridTiles3D>();
 
   void _apply(Map<int, int?> cells) {
     final tiles = _tiles;
@@ -135,6 +130,10 @@ class GridTileTool extends LevelToolHandler {
   final Map<int, int?> _before = {};
   GridCell? _fillFrom, _last;
 
+  // The floor level a stroke stays on once its first cell is down: what
+  // it paints is not a surface to stack the next cell on.
+  int? _storey;
+
   @override
   String get id => toolId;
 
@@ -162,15 +161,31 @@ class GridTileTool extends LevelToolHandler {
   /// The library painted from, once loaded.
   MeshLibrary? get loadedLibrary => _libraries.get(library.value);
 
-  /// The tiles it paints into: the selected ones, else the first using
+  /// The tiles it paints into: the selected ones when they use its
+  /// library (a stroke switches it to theirs first), else the first using
   /// its library; null for none yet.
   Entity? get target {
     final selected = designer.sceneState.selectedEntity.value;
-    if (selected != null && selected.hasComponent<GridTiles3D>()) return selected;
+    final tiles = selected?.getComponent<GridTiles3D>();
+    if (tiles != null && tiles.library.isNotEmpty && tiles.library == library.value) return selected;
     for (final e in designer.world.query([GridTiles3D])) {
       if (e.getComponent<GridTiles3D>()!.library == library.value) return e;
     }
     return null;
+  }
+
+  /// Paints from the selected tiles' library, when tiles are selected:
+  /// their pieces' ids and their cells' size are that library's, never
+  /// another's. A piece the library has not got becomes its first.
+  void _followSelection() {
+    final tiles = designer.sceneState.selectedEntity.value?.getComponent<GridTiles3D>();
+    if (tiles != null && tiles.library.isNotEmpty && tiles.library != library.value) {
+      library.value = tiles.library;
+    }
+    final loaded = loadedLibrary;
+    if (loaded != null && loaded.items.isNotEmpty && loaded.item(item.value) == null) {
+      item.value = loaded.items.first.id;
+    }
   }
 
   /// [entity]'s space to the world's, and back; the world's own for none.
@@ -267,8 +282,9 @@ class GridTileTool extends LevelToolHandler {
   @override
   bool onPointerDown(ToolContext context) {
     final space = context.space;
-    final loaded = loadedLibrary;
     if (space == null) return false;
+    _followSelection();
+    final loaded = loadedLibrary;
     if (loaded == null) {
       context.controller.setStatus(library.value.isEmpty ? 'Choose a mesh library in the Tiles panel' : 'Loading ${library.value}…');
       return true;
@@ -286,6 +302,7 @@ class GridTileTool extends LevelToolHandler {
       return true;
     }
     _last = cell;
+    _storey = -cell.y - 1;
     _put(cell);
     _show(cell, cell, loaded);
     return true;
@@ -304,7 +321,9 @@ class GridTileTool extends LevelToolHandler {
       return;
     }
     if (_last == null) return;
-    final cell = _cellAt(space, loaded, inside: mode.value == GridTileMode.erase);
+    // On the level the stroke began on: a tile just painted is not a
+    // surface to stack the next on, nor one just erased a hole to dig on.
+    final cell = _cellAt(space, loaded, inside: mode.value == GridTileMode.erase, onFloor: _storey);
     if (cell == null || cell == _last) return;
     _last = cell;
     _put(cell);
@@ -329,7 +348,9 @@ class GridTileTool extends LevelToolHandler {
 
   @override
   void onPointerHover(ToolContext context) {
-    final space = context.space, loaded = loadedLibrary;
+    final space = context.space;
+    if (space != null) _followSelection();
+    final loaded = loadedLibrary;
     if (space == null || loaded == null) {
       preview.value = null;
       return;
@@ -344,6 +365,7 @@ class GridTileTool extends LevelToolHandler {
     _madeTarget = false;
     _fillFrom = null;
     _last = null;
+    _storey = null;
   }
 
   void _commit(ToolContext context) {
@@ -351,6 +373,7 @@ class GridTileTool extends LevelToolHandler {
     final changed = {for (final MapEntry(:key, :value) in _before.entries) if (target?.getComponent<GridTiles3D>()?.cells[key] != value) key: value};
     _fillFrom = null;
     _last = null;
+    _storey = null;
     if (target == null) return;
     final tiles = target.getComponent<GridTiles3D>()!;
     final verb = mode.value == GridTileMode.erase ? 'Erase' : (mode.value == GridTileMode.fill ? 'Fill' : 'Paint');
@@ -360,9 +383,8 @@ class GridTileTool extends LevelToolHandler {
       designer.history.pushApplied(
         GridTileStrokeCommand(
           label: '$verb ${changed.length} tile${changed.length == 1 ? '' : 's'}',
-          world: designer.world,
           sceneState: designer.sceneState,
-          entityName: target.name!,
+          entity: target,
           before: changed,
           after: {for (final key in changed.keys) key: tiles.cells[key]},
         ),

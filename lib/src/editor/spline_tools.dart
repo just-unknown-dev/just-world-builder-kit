@@ -182,10 +182,13 @@ class SplineTool extends LevelToolHandler {
     }
     final first = _points.isEmpty ? null : space.view.projectToScreen(_points.first);
     if (_points.length >= 3 && first != null && (first - space.screen).distance <= closeReach) {
-      closed.value = true;
-      _finish(context);
+      // Closed this once: the option stays as it was for the next.
+      _finish(context, close: true);
       return true;
     }
+    // A second click on the same spot (the first click of a double-click)
+    // adds no point: a spline through one spot twice folds back on itself.
+    if (_points.isNotEmpty && (_points.last - p).lengthSquared < 1e-6) return true;
     _points.add(p);
     _show();
     return true;
@@ -218,7 +221,7 @@ class SplineTool extends LevelToolHandler {
     return false;
   }
 
-  void _finish(ToolContext context) {
+  void _finish(ToolContext context, {bool close = false}) {
     if (_points.length < 2) {
       context.controller.setStatus('A spline needs two points or more');
       return;
@@ -228,7 +231,7 @@ class SplineTool extends LevelToolHandler {
       designer,
       _points,
       kind,
-      closed: closed.value && _points.length >= 3,
+      closed: (close || closed.value) && _points.length >= 3,
       smooth: smooth.value,
     );
     _reset();

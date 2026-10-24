@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:just_editor_core/just_editor_core.dart';
 import 'package:just_game_engine/graphics_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
+import 'package:just_game_engine/physics_3d.dart';
 import 'package:just_signals/just_signals.dart';
 
 /// The tool strip's group for blockout.
@@ -32,9 +33,14 @@ final class BlockoutPreview {
 }
 
 /// Makes an entity of [components] named after [prefix], selected, as one
-/// undo step called [label].
+/// undo step called [label] — solid, as the engine's Solid shapes are: a
+/// static body and a collider matching its shape, so a blocked-out level
+/// plays at once.
 Entity _make(DesignerToolContext context, List<Component> components, String prefix, String label) {
-  final entity = context.world.createEntityWithComponents(components, name: context.uniqueName(prefix));
+  final entity = context.world.createEntityWithComponents(
+    [...components, RigidBody3D(bodyType: BodyType3D.static), Collider3D(shape: ColliderShape3D.matchShape)],
+    name: context.uniqueName(prefix),
+  );
   context.history.pushApplied(
     CreateEntitiesCommand.adopting(
       label: label,

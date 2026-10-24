@@ -48,8 +48,8 @@ final class ScatterLayer {
     this.alignToNormal = false,
     this.maxDistance = 80,
     this.collision = ScatterCollision.none,
-    this.colliderRadius = 0.3,
-    this.colliderHeight = 2,
+    this.colliderRadius = 0.4,
+    this.colliderHeight = 1.2,
   });
 
   String name;
@@ -79,7 +79,9 @@ final class ScatterLayer {
 
   ScatterCollision collision;
 
-  /// The solid part of a piece, at scale 1 (metres).
+  /// The solid part of a piece, at scale 1 (metres): half as wide as it
+  /// is across, and as tall as it is. As big as the cone a new layer
+  /// shows, until it is set for what the layer shows.
   double colliderRadius, colliderHeight;
 
   ScatterLayer copy() => ScatterLayer.fromJson(toJson());
@@ -115,8 +117,8 @@ final class ScatterLayer {
       alignToNormal: json['alignToNormal'] as bool? ?? false,
       maxDistance: n(json['maxDistance'], 80),
       collision: ScatterCollision.values.where((c) => c.name == json['collision']).firstOrNull ?? ScatterCollision.none,
-      colliderRadius: n(json['colliderRadius'], 0.3),
-      colliderHeight: n(json['colliderHeight'], 2),
+      colliderRadius: n(json['colliderRadius'], 0.4),
+      colliderHeight: n(json['colliderHeight'], 1.2),
     );
   }
 
@@ -136,8 +138,9 @@ final class ScatterInstance {
   final double yaw, scale;
   final Vector3 normal;
 
-  /// Where it is drawn: moved, leant, turned and grown.
-  Matrix4 matrix({bool lean = false}) {
+  /// How it is turned: [yaw] about its up, then leant with [normal] when
+  /// [lean].
+  Quaternion turn({bool lean = false}) {
     final turn = Quaternion.axisAngle(Vector3(0, 1, 0), yaw);
     if (lean) {
       final up = Vector3(0, -1, 0), n = Vector3.copy(normal)..normalize();
@@ -147,8 +150,12 @@ final class ScatterInstance {
         turn.premultiply(Quaternion.axisAngle(axis..normalize(), math.atan2(s, up.dot(n))));
       }
     }
-    return Matrix4.identity()..setFromTrs(position, turn, Vector3(scale, scale, scale));
+    return turn;
   }
+
+  /// Where it is drawn: moved, leant, turned and grown.
+  Matrix4 matrix({bool lean = false}) =>
+      Matrix4.identity()..setFromTrs(position, turn(lean: lean), Vector3(scale, scale, scale));
 }
 
 /// Things scattered over the ground — grass, flowers, rocks, trees — of a
@@ -175,9 +182,18 @@ class Scatter3D extends Component implements SolidShapeSource {
 
   (int, List<SolidPart>)? _solid;
 
-  @override
-  Object get solidKey => revision;
+  // Equal only to itself: what keeps this scatter's solid key its own.
+  // Every scatter read from a scene has the same [revision].
+  final Object _identity = Object();
 
+  /// This scatter's own, and its [revision]: a physics engine that keeps
+  /// shapes by key never mistakes another scatter for this one.
+  @override
+  Object get solidKey => (_identity, revision);
+
+  /// Its solid layers' pieces: a box turned and leant as its piece is
+  /// drawn, or an upright capsule (a trunk stands up whatever the ground
+  /// does), each standing on its spot.
   @override
   List<SolidPart> get solidParts {
     final known = _solid;
@@ -193,7 +209,27 @@ class Scatter3D extends Component implements SolidShapeSource {
         case ScatterCollision.none:
           break;
         case ScatterCollision.box:
-          parts.add(SolidBox(r, h / 2, r, x: p.x, y: p.y - h / 2, z: p.z));
+          final turn = i.turn(lean: l.alignToNormal);
+          if (turn.w.abs() >= 1 - 1e-12) {
+            parts.add(SolidBox(r, h / 2, r, x: p.x, y: p.y - h / 2, z: p.z));
+            break;
+          }
+          // Turned: its eight corners, as the piece is turned.
+          final corners = Float32List(24);
+          var k = 0;
+          for (final cx in [-r, r]) {
+            for (final cy in [0.0, -h]) {
+              for (final cz in [-r, r]) {
+                final v = Vector3(cx, cy, cz);
+                turn.rotate(v);
+                corners
+                  ..[k++] = p.x + v.x
+                  ..[k++] = p.y + v.y
+                  ..[k++] = p.z + v.z;
+              }
+            }
+          }
+          parts.add(SolidHull(corners));
         case ScatterCollision.capsule:
           parts.add(SolidCapsule(math.max(0, h / 2 - r), r, x: p.x, y: p.y - h / 2, z: p.z));
       }
@@ -229,6 +265,10 @@ class ScatterInstancesFieldType extends FieldType<List<ScatterInstance>> {
 
   static const int _version = 1;
   static const int _record = 29;
+
+  /// The most bytes the pieces may unpack to (64 MB, two million pieces):
+  /// a damaged text fails at once instead of filling memory.
+  static const int maxBytes = 64 << 20;
   static const ZlibCodec _zlib = ZlibCodec();
 
   @override
@@ -262,7 +302,7 @@ class ScatterInstancesFieldType extends FieldType<List<ScatterInstance>> {
   /// The pieces [text] holds; a [FormatException] when it holds none.
   static List<ScatterInstance> decodeInstances(String text) {
     if (text.isEmpty) return [];
-    final raw = _zlib.decode(base64Decode(text));
+    final raw = _zlib.decode(base64Decode(text), maxOutputSize: maxBytes);
     if (raw.isEmpty || raw[0] > _version || (raw.length - 1) % _record != 0) {
       throw const FormatException('Not scattered pieces');
     }

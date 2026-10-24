@@ -81,7 +81,15 @@ final class TerrainRenderProvider extends RenderProvider<Terrain3D> {
         if (primitive != null) out.addMesh(primitive, material, castShadows: t.castShadows);
       }
     }
+    // Bigger chunks than before: the pieces past the new last ones go.
+    if (cache.length > perSide * perSide) {
+      cache.removeWhere((at, _) => at.$1 >= perSide || at.$2 >= perSide);
+    }
   }
+
+  /// How many chunks it keeps for [data] — what it drew last, a piece of
+  /// the ground each.
+  int chunksKept(TerrainData data) => _chunks[data]?.length ?? 0;
 
   /// What chunk ([cx], [cz]) of [cells] cells is built from: its blocks'
   /// revisions.

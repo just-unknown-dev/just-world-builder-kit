@@ -99,9 +99,16 @@ final class WorldBuilderRayTest implements EntityRayTest, EntitySurfaceTest {
       return origin.y + direction.y * t + data.heightAt(x, z);
     }
 
+    // Whether the triangle of ground under the ray at [t] is left out: a
+    // hole at any of its corners, the rule the terrain is drawn and solid
+    // by. Each cell is split from its (i + 1, j) corner to its (i, j + 1).
     bool holeAt(double t) {
-      final i = ((origin.x + direction.x * t - start) / cell).round(), j = ((origin.z + direction.z * t - start) / cell).round();
-      return i >= 0 && j >= 0 && i < data.resolution && j < data.resolution && data.isHole(i, j);
+      final x = (origin.x + direction.x * t - start) / cell, z = (origin.z + direction.z * t - start) / cell;
+      final last = data.resolution - 1;
+      if (x < 0 || z < 0 || x > last || z > last) return false;
+      final i = math.min(x.floor(), last - 1), j = math.min(z.floor(), last - 1);
+      if (data.isHole(i + 1, j) || data.isHole(i, j + 1)) return true;
+      return (x - i) + (z - j) <= 1 ? data.isHole(i, j) : data.isHole(i + 1, j + 1);
     }
 
     final speed = direction.length;

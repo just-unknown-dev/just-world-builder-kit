@@ -71,8 +71,10 @@ class Terrain3D extends Component implements SolidShapeSource {
   /// Where sample (0, 0) is: its corner, the entity in its middle.
   double get origin => -size / 2;
 
+  /// Its ground (which terrains sharing a file share), how far it is done,
+  /// and its size: terrains on one file and of one size are the same solid.
   @override
-  Object get solidKey => (identityHashCode(loaded), loaded?.solidRevision, size);
+  Object get solidKey => (loaded?.identity, loaded?.solidRevision, size);
 
   @override
   List<SolidPart> get solidParts {
@@ -134,14 +136,21 @@ final class TerrainFiles {
   /// Why the file at [path] could not be read, if it could not.
   Object? errorOf(String path) => _errors[path];
 
-  /// Loads the file at [path].
+  /// Whether [path] is taken here: loaded (or found missing), loading, or
+  /// put and not yet written. Unlike [get], asking starts no load.
+  bool knows(String path) => _loaded.containsKey(path) || _loading.containsKey(path) || _unsaved.contains(path);
+
+  /// Loads the file at [path]. Ground [put] at [path] while it was read
+  /// is kept: changes not yet written are dropped only by [forget].
   Future<TerrainData?> load(String path) => _loading[path] ??= () async {
     try {
       final data = TerrainData.decode(await read(path));
+      if (_unsaved.contains(path)) return _loaded[path];
       _loaded[path] = data;
       _errors.remove(path);
       return data;
     } on Object catch (e) {
+      if (_unsaved.contains(path)) return _loaded[path];
       _loaded[path] = null;
       _errors[path] = e;
       return null;
@@ -150,6 +159,29 @@ final class TerrainFiles {
       _revision++;
     }
   }();
+
+  /// The ground at [path], loaded first when it is not yet (null when it
+  /// could not be read): what a game awaits before its level starts
+  /// (`WorldBuilderKit.ready`).
+  Future<TerrainData?> ready(String path) async {
+    if (path.isEmpty) return null;
+    if (_loaded.containsKey(path)) return _loaded[path];
+    return load(path);
+  }
+
+  /// Lets go of every file loaded but not in [used] — what a level no
+  /// longer shows. Changes not yet written ([unsaved]) are kept, and so is
+  /// one still loading.
+  void releaseUnused(Iterable<String> used) {
+    final keep = {...used, ..._unsaved};
+    final gone = [for (final path in _loaded.keys) if (!keep.contains(path)) path];
+    if (gone.isEmpty) return;
+    for (final path in gone) {
+      _loaded.remove(path);
+      _errors.remove(path);
+    }
+    _revision++;
+  }
 
   /// [data] as the file at [path], not yet written: a new terrain, or a
   /// copy made unique.

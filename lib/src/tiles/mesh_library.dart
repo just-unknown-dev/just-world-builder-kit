@@ -9,11 +9,12 @@ enum PieceCollision {
   /// Not at all: grass, a lamp's light.
   none,
 
-  /// As its whole cell: a block, a floor, a wall.
+  /// As its whole cell, whatever it shows: a block that fills it. Rows of
+  /// them are merged into long boxes, the cheapest to collide with.
   box,
 
-  /// As its own shape — a ramp's slope, stairs' steps — for a shape tile;
-  /// a model tile is solid as its cell.
+  /// As its own shape — a floor's slab, a wall, a ramp's slope, stairs'
+  /// steps — for a shape tile; a model tile is solid as its cell.
   shape,
 }
 
@@ -31,7 +32,8 @@ final class MeshLibraryItem {
     this.scale = 1,
   }) : offset = offset ?? Vector3.zero();
 
-  /// Which it is, in a [GridTiles3D]'s cells: 1 and up, never reused.
+  /// Which it is, in a [GridTiles3D]'s cells: 1 and up, never reused
+  /// ([MeshLibrary.nextId]).
   final int id;
 
   String name;
@@ -92,7 +94,9 @@ final class MeshLibraryItem {
 /// models of a kit of parts — and how big its cells are: a
 /// `.meshlib.json` file.
 final class MeshLibrary {
-  MeshLibrary({this.cellSize = 2, List<MeshLibraryItem>? items}) : items = items ?? [];
+  MeshLibrary({this.cellSize = 2, List<MeshLibraryItem>? items, int lastId = 0})
+    : items = items ?? [],
+      lastId = (items ?? const <MeshLibraryItem>[]).fold(lastId, (top, i) => i.id > top ? i.id : top);
 
   /// What its files end with.
   static const String ending = '.meshlib.json';
@@ -114,16 +118,31 @@ final class MeshLibrary {
     return null;
   }
 
-  /// An id no item has had.
-  int get nextId => items.fold(0, (top, i) => i.id > top ? i.id : top) + 1;
+  /// The highest id any item has had, kept in the file: an item taken out
+  /// leaves its id behind, so tiles of it stay empty rather than turning
+  /// into the next piece made.
+  int lastId;
 
-  MeshLibrary copy() => MeshLibrary(cellSize: cellSize, items: [for (final i in items) i.copy()]);
+  /// An id no item has had.
+  int get nextId => items.fold(lastId, (top, i) => i.id > top ? i.id : top) + 1;
+
+  /// [nextId], kept as had: the id to give a new item.
+  int takeId() => lastId = nextId;
+
+  /// Takes the item with [id] out, keeping its id as had.
+  void remove(int id) {
+    lastId = nextId - 1;
+    items.removeWhere((i) => i.id == id);
+  }
+
+  MeshLibrary copy() => MeshLibrary(cellSize: cellSize, items: [for (final i in items) i.copy()], lastId: lastId);
 
   /// The file's text.
   String encode() => '${const JsonEncoder.withIndent('  ').convert({
     'format': format,
     'version': version,
     'cellSize': cellSize,
+    'lastId': nextId - 1,
     'items': [for (final i in items) i.toJson()],
   })}\n';
 
@@ -136,8 +155,10 @@ final class MeshLibrary {
     final cell = (json['cellSize'] as num?)?.toDouble() ?? 2;
     if (!(cell > 0)) throw FormatException('A mesh library\'s cells need a size: $cell');
     final items = json['items'];
+    final lastId = json['lastId'];
     return MeshLibrary(
       cellSize: cell,
+      lastId: lastId is int && lastId > 0 ? lastId : 0,
       items: [
         if (items is List)
           for (final i in items)
@@ -155,11 +176,14 @@ final class MeshLibrary {
     return MeshLibrary(
       cellSize: c,
       items: [
-        // +Y is down: a floor lies on its cell's bottom.
+        // +Y is down: a floor lies on its cell's bottom. Floors and walls
+        // are solid as their slabs: as their cells, a floor would hold
+        // the player up a cell above it and a wall would fill its cell.
         MeshLibraryItem(
           id: 1,
           name: 'Floor',
           shape: shape(Cube3D(width: c, height: slab, depth: c, color: const Color(0xFF9FA8B3))),
+          collision: PieceCollision.shape,
           offset: Vector3(0, c / 2 - slab / 2, 0),
         ),
         MeshLibraryItem(id: 2, name: 'Block', shape: shape(Cube3D(width: c, height: c, depth: c, color: const Color(0xFFB0BEC5)))),
@@ -167,6 +191,7 @@ final class MeshLibrary {
           id: 3,
           name: 'Wall',
           shape: shape(Cube3D(width: c, height: c, depth: slab, color: const Color(0xFFD7CCC8))),
+          collision: PieceCollision.shape,
           offset: Vector3(0, 0, -(c / 2 - slab / 2)),
         ),
         MeshLibraryItem(
@@ -221,8 +246,18 @@ final class MeshLibraries {
     return null;
   }
 
-  /// Why the library at [path] could not be read, if it could not.
+  /// Why the library at [path] could not be read — or, once read, why a
+  /// piece of it could not be made — if one could not.
   Object? errorOf(String path) => _errors[path];
+
+  /// The library at [path], loaded first when it is not yet (null when it
+  /// could not be read): what a game awaits before its level starts
+  /// (`WorldBuilderKit.ready`).
+  Future<MeshLibrary?> ready(String path) async {
+    if (path.isEmpty) return null;
+    if (_loaded.containsKey(path)) return _loaded[path];
+    return load(path);
+  }
 
   /// Loads the library at [path].
   Future<MeshLibrary?> load(String path) => _loading[path] ??= () async {
@@ -242,15 +277,6 @@ final class MeshLibraries {
     }
   }();
 
-  /// [library] as the one at [path] — an editor's open document — drawn
-  /// and solid at once.
-  void put(String path, MeshLibrary library) {
-    _loaded[path] = library;
-    _errors.remove(path);
-    _shapes.removeWhere((key, _) => key.$1 == path);
-    _revision++;
-  }
-
   /// Reads the library at [path] again next time it is asked for.
   void forget(String path) {
     if (_loaded.remove(path) == null && !_errors.containsKey(path)) return;
@@ -259,13 +285,34 @@ final class MeshLibraries {
     _revision++;
   }
 
-  /// [item]'s shape, from the library at [path].
+  /// Lets go of every library loaded but not in [used] — what a level no
+  /// longer shows; one still loading is kept.
+  void releaseUnused(Iterable<String> used) {
+    final keep = used.toSet();
+    final gone = [for (final path in _loaded.keys) if (!keep.contains(path)) path];
+    if (gone.isEmpty) return;
+    for (final path in gone) {
+      _loaded.remove(path);
+      _errors.remove(path);
+    }
+    _shapes.removeWhere((key, _) => !keep.contains(key.$1));
+    _revision++;
+  }
+
+  /// [item]'s shape, from the library at [path]; null for a model piece,
+  /// or one whose shape could not be made (why is [errorOf] the path):
+  /// it is then solid as its cell, and not drawn.
   Primitive3D? shapeOf(String path, MeshLibraryItem item) {
     final json = item.shape;
     if (item.model.isNotEmpty || json == null) return null;
     return _shapes.putIfAbsent((path, item.id), () {
-      final decoded = context.definitions.decode(Map<String, dynamic>.from(json));
-      return decoded is Primitive3D ? decoded : null;
+      try {
+        final decoded = context.definitions.decode(Map<String, dynamic>.from(json));
+        return decoded is Primitive3D ? decoded : null;
+      } on Object catch (e) {
+        _errors[path] = FormatException('Piece ${item.id} (${item.name}): $e');
+        return null;
+      }
     });
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -398,8 +399,9 @@ Entity makeTerrain(DesignerToolContext designer, {required String sceneName, dou
 }
 
 /// Gives [entity]'s terrain a file of its own — a copy of the ground it
-/// shares — as one undo step.
-void makeTerrainUnique(EditorScope scope, Entity entity, {required String sceneName}) {
+/// shares — as one undo step. Its name is one no file has, here or on
+/// disk under [root] (the project folder) when given.
+void makeTerrainUnique(EditorScope scope, Entity entity, {required String sceneName, String? root}) {
   final t = entity.getComponent<Terrain3D>();
   final data = t?.loaded;
   if (t == null || data == null) return;
@@ -407,7 +409,10 @@ void makeTerrainUnique(EditorScope scope, Entity entity, {required String sceneN
   final base = 'assets/terrain/$sceneName/${entity.name ?? 'terrain'}';
   var n = 2;
   String pathOf(int n) => '${base}_$n${TerrainData.ending}';
-  while (files.get(pathOf(n)) != null || files.unsaved.contains(pathOf(n))) {
+  // Asked without loading: a load started here would come back after the
+  // copy is put, and put the file's ground (or nothing) in its place.
+  bool taken(String path) => files.knows(path) || (root != null && File('$root/$path').existsSync());
+  while (taken(pathOf(n))) {
     n++;
   }
   final path = pathOf(n);
@@ -419,12 +424,14 @@ void makeTerrainUnique(EditorScope scope, Entity entity, {required String sceneN
 
 /// The designer's Terrain panel, open with the Terrain tool: the terrain
 /// being shaped and the brush, then a new terrain's size and detail.
-SidePanelSection terrainPanel(TerrainSculptTool? Function() tool) => SidePanelSection(
+/// [root] is the project folder, where a terrain made unique must find a
+/// name no file has.
+SidePanelSection terrainPanel(TerrainSculptTool? Function() tool, {String? root}) => SidePanelSection(
   id: 'worldBuilder.terrain',
   title: 'TERRAIN',
   order: 31,
   groups: const {terrainGroup},
-  build: (context, session) => _TerrainPanel(session: session, tool: tool),
+  build: (context, session) => _TerrainPanel(session: session, tool: tool, root: root),
 );
 
 /// How finely a new terrain is sampled.
@@ -442,10 +449,11 @@ enum TerrainDetail {
 }
 
 class _TerrainPanel extends StatefulWidget {
-  const _TerrainPanel({required this.session, required this.tool});
+  const _TerrainPanel({required this.session, required this.tool, this.root});
 
   final DesignerSession session;
   final TerrainSculptTool? Function() tool;
+  final String? root;
 
   @override
   State<_TerrainPanel> createState() => _TerrainPanelState();
@@ -500,7 +508,7 @@ class _TerrainPanelState extends State<_TerrainPanel> {
                   EditorButton(
                     label: 'Make unique',
                     icon: Icons.call_split,
-                    onPressed: () => makeTerrainUnique(session.scope, entity, sceneName: scene),
+                    onPressed: () => makeTerrainUnique(session.scope, entity, sceneName: scene, root: widget.root),
                   ),
                   const PanelHint('Another terrain uses the same file: shaping one shapes both until this one has its own.'),
                 ],

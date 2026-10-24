@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_game_engine/graphics_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
+import 'package:just_game_engine/physics_3d.dart';
 import 'package:just_game_engine_editor/just_game_engine_editor.dart';
 import 'package:just_world_builder_kit/editor.dart';
 import 'package:just_world_builder_kit/just_world_builder_kit.dart';
@@ -56,6 +57,8 @@ void main() {
     setUp(() {
       final world = World()..initialize();
       Graphics3D.registerSchemas(world.context);
+      // As a 3-D game's editor has them: bodies and colliders saved.
+      Physics3D.registerSchemas(world.context);
       scope = EditorScope(
         world: world,
         modules: [WorldBuilderModule()],
@@ -168,6 +171,41 @@ void main() {
       release(Vector3(math.sqrt(2) * 3 + 1, 0, 4.5));
       final stairs = only<Stairs3D>().getComponent<Primitive3D>()! as Stairs3D;
       expect(stairs.steps, 10, reason: '2 m of 20 cm steps');
+    });
+
+    test('every piece is solid, as the engine\'s Solid shapes are: a static body matching its shape', () {
+      final ledge = scope.world.createEntityWithComponents([
+        TransformComponent(position: Vector3(0, -1, 6)),
+        Cube3D(width: 4, height: 2, depth: 4),
+      ], name: 'Ledge');
+      scope.sceneState.registerEntity(ledge);
+      session.setTool(BlockTool.toolId);
+      press(Vector3(5, 0, 0));
+      release(Vector3(5, 0, 0));
+      session.setTool(FloorTool.toolId);
+      for (final p in [Vector3(-8, 0, -4), Vector3(-4, 0, -4), Vector3(-4, 0, -1)]) {
+        press(p);
+        release(p);
+      }
+      session.handleKey(LogicalKeyboardKey.enter, gridSize: 32);
+      session.setTool(RampTool.toolId);
+      press(Vector3(0, 0, 0));
+      move(Vector3(0, -2, 4.5));
+      release(Vector3(0, -2, 4.5));
+      final made = [
+        for (final e in scope.world.entities)
+          if (e.hasComponent<Primitive3D>() && !identical(e, ledge)) e,
+      ];
+      expect(made.map((e) => e.getComponent<Primitive3D>().runtimeType).toSet(), {Cube3D, Polygon3D, Ramp3D});
+      for (final e in made) {
+        expect(e.getComponent<RigidBody3D>()?.bodyType, BodyType3D.static, reason: e.name);
+        expect(e.getComponent<Collider3D>()?.shape, ColliderShape3D.matchShape, reason: e.name);
+      }
+      // Undone and redone with them.
+      expect(scope.history.undoEntries, hasLength(3));
+      scope.history.undo();
+      scope.history.redo();
+      expect(only<Ramp3D>().getComponent<Collider3D>(), isNotNull);
     });
   });
 }

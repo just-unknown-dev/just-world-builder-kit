@@ -15,14 +15,15 @@ import 'spline_tools.dart' show adoptEntities;
 /// The tool strip's group for scatter.
 const String scatterGroup = 'worldBuilder.scatter';
 
-/// A stroke of the Scatter brush: the pieces of the [Scatter3D] on the
-/// entity named [entityName] as they were and as they became.
+/// A stroke of the Scatter brush: the pieces of the [Scatter3D] on
+/// [entity] as they were and as they became — found again as the editor
+/// finds an entity rebuilt (`EditorSceneState.liveEntity`), whatever it
+/// is named.
 class ScatterStrokeCommand extends EditorCommand {
   ScatterStrokeCommand({
     required this.label,
-    required this.world,
     required this.sceneState,
-    required this.entityName,
+    required this.entity,
     required this.before,
     required this.after,
   });
@@ -30,20 +31,17 @@ class ScatterStrokeCommand extends EditorCommand {
   @override
   final String label;
 
-  final World world;
   final EditorSceneState sceneState;
-  final String entityName;
+
+  /// The entity painted, as it was when the stroke was made.
+  final Entity entity;
+
   final List<ScatterInstance> before, after;
 
   void _apply(List<ScatterInstance> instances) {
-    for (final e in world.entities) {
-      if (e.name != entityName) continue;
-      final s = e.getComponent<Scatter3D>();
-      if (s == null) continue;
-      s
-        ..instances = List.of(instances)
-        ..revision += 1;
-    }
+    sceneState.liveEntity(entity)?.getComponent<Scatter3D>()
+      ?..instances = List.of(instances)
+      ..revision += 1;
     sceneState
       ..markDirty()
       ..refresh();
@@ -210,8 +208,8 @@ class ScatterTool extends LevelToolHandler {
       }
       return;
     }
-    final index = layer.value.clamp(0, scatter.layers.length - 1);
     if (scatter.layers.isEmpty) return;
+    final index = layer.value.clamp(0, scatter.layers.length - 1);
     final l = scatter.layers[index];
     final spacing = _spacing ??= ScatterSpacing(scatter.instances, index, l.spacing);
     final grounds = _grounds().toList();
@@ -288,13 +286,12 @@ class ScatterTool extends LevelToolHandler {
     final verb = erase.value || context.isShiftDown ? 'Erase' : 'Scatter';
     if (_made) {
       adoptEntities(designer, [entity], '$verb ${scatter.layers.isEmpty ? '' : scatter.layers[layer.value.clamp(0, scatter.layers.length - 1)].name.toLowerCase()}');
-    } else if (scatter.instances.length != before.length) {
+    } else if (!_same(scatter.instances, before)) {
       designer.history.pushApplied(
         ScatterStrokeCommand(
           label: '$verb pieces',
-          world: designer.world,
           sceneState: designer.sceneState,
-          entityName: entity.name!,
+          entity: entity,
           before: before,
           after: List.of(scatter.instances),
         ),
@@ -311,6 +308,17 @@ class ScatterTool extends LevelToolHandler {
     );
     _entity = null;
     _made = false;
+  }
+
+  /// Whether [a] holds the very pieces [b] does, in order: a stroke that
+  /// scattered some and erased as many (Shift pressed on the way) still
+  /// changed them.
+  static bool _same(List<ScatterInstance> a, List<ScatterInstance> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!identical(a[i], b[i])) return false;
+    }
+    return true;
   }
 
   @override
@@ -462,6 +470,25 @@ String scatterCollisionLabel(ScatterCollision c) => switch (c) {
   ScatterCollision.box => 'Box',
   ScatterCollision.capsule => 'Capsule',
 };
+
+/// Takes layer [index] out of [scatter], and its pieces with it — the
+/// pieces of the layers after it now count one less — as one undo step.
+void removeScatterLayer(EditorScope scope, Scatter3D scatter, int index) {
+  if (index < 0 || index >= scatter.layers.length) return;
+  final name = scatter.layers[index].name;
+  final edit = ComponentEdit.begin(scope, scatter);
+  scatter
+    ..layers = [for (final (k, x) in scatter.layers.indexed) if (k != index) x]
+    ..instances = [
+      for (final p in scatter.instances)
+        if (p.layer != index)
+          p.layer < index
+              ? p
+              : ScatterInstance(layer: p.layer - 1, position: p.position, yaw: p.yaw, scale: p.scale, normal: p.normal),
+    ]
+    ..revision += 1;
+  edit.commit('Remove $name');
+}
 
 /// How many pieces each of [scatter]'s layers has.
 List<int> scatterCounts(Scatter3D scatter) {
@@ -721,22 +748,7 @@ class _ScatterPanelState extends State<_ScatterPanel> {
             icon: Icons.delete_outline,
             tooltip: 'Remove this layer and its pieces',
             onTap: () {
-              final edit = ComponentEdit.begin(widget.session.scope, scatter);
-              scatter
-                ..layers = [for (final (k, x) in scatter.layers.indexed) if (k != i) x]
-                ..instances = [
-                  for (final p in scatter.instances)
-                    if (p.layer != i)
-                      ScatterInstance(
-                        layer: p.layer > i ? p.layer - 1 : p.layer,
-                        position: p.position,
-                        yaw: p.yaw,
-                        scale: p.scale,
-                        normal: p.normal,
-                      ),
-                ]
-                ..revision += 1;
-              edit.commit('Remove ${l.name}');
+              removeScatterLayer(widget.session.scope, scatter, i);
               widget.tool()?.layer.value = 0;
             },
           ),

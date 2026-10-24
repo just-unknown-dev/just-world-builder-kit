@@ -78,7 +78,8 @@ class WorldBuilderModule extends EditorModule {
   }
 
   /// Another scene, or this one again: terrain changes never saved are
-  /// dropped with the rest of its changes.
+  /// dropped with the rest of its changes, and the files the scene left
+  /// behind are let go.
   @override
   void onSceneOpened(String sceneName) {
     final scope = _scope;
@@ -87,6 +88,10 @@ class WorldBuilderModule extends EditorModule {
     for (final path in terrainFiles.unsaved.toList()) {
       terrainFiles.forget(path);
     }
+    terrainFiles.releaseUnused([for (final e in scope.world.query([Terrain3D])) e.getComponent<Terrain3D>()!.data]);
+    MeshLibraries.of(scope.context).releaseUnused([
+      for (final e in scope.world.query([GridTiles3D])) e.getComponent<GridTiles3D>()!.library,
+    ]);
   }
 
   @override
@@ -130,7 +135,7 @@ class WorldBuilderModule extends EditorModule {
   @override
   List<SidePanelSection> get designerPanels => [
     tilesPanel(_tileTool, files),
-    terrainPanel(_terrainTool),
+    terrainPanel(_terrainTool, root: files.root),
     scatterPanel(_scatterTool, files.root),
   ];
 

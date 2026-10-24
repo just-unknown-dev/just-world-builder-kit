@@ -152,6 +152,92 @@ void main() {
       tiles.clearTile(5, -1, 0);
       expect(tiles.solidParts.whereType<SolidBox>(), hasLength(1));
     });
+
+    test('the starter floors and walls are solid as their slabs, not their cells', () async {
+      final text = MeshLibrary.starter(world.context.definitions).encode();
+      world.context.tiles.readText = (path) async => text;
+      final libraries = MeshLibraries.of(world.context);
+      await libraries.load(_path);
+      final tiles = GridTiles3D(library: _path)
+        ..setTile(0, -1, 0, 1) // a floor, on the ground
+        ..setTile(3, -1, 0, 3) // a wall
+        ..link(libraries);
+      final boxes = tiles.solidParts.whereType<SolidBox>().toList();
+      expect(boxes, hasLength(2));
+      final floor = boxes.firstWhere((b) => b.halfY < 0.5);
+      // +Y is down: its top 0.2 m up, its bottom on the ground — as drawn.
+      expect([floor.y - floor.halfY, floor.y + floor.halfY], [closeTo(-0.2, 1e-6), closeTo(0, 1e-6)]);
+      expect([floor.halfX, floor.halfZ], [1, 1]);
+      final wall = boxes.firstWhere((b) => b.halfY > 0.5);
+      expect([wall.halfZ, wall.z], [closeTo(0.1, 1e-6), closeTo(0.1, 1e-6)], reason: '0.2 m thick, at its cell\'s side');
+    });
+
+    test('a piece taken out leaves its number behind', () {
+      final library = MeshLibrary.starter(world.context.definitions)..remove(6);
+      expect(library.takeId(), 7, reason: 'not 6: tiles of the pillar stay empty');
+      final back = MeshLibrary.parse(library.encode());
+      expect(back.nextId, 8);
+      // A file from before the number was kept: its highest piece taken out.
+      final old = MeshLibrary.parse('{"format": "just.meshlib", "version": 1, "items": [{"id": 1}, {"id": 2}]}')..remove(2);
+      expect(old.takeId(), 3);
+    });
+
+    test('a piece whose shape cannot be made: solid as its cell and said, never a throw', () async {
+      final bad = MeshLibrary(
+        items: [
+          MeshLibraryItem(
+            id: 1,
+            name: 'Broken',
+            shape: {
+              'type': 'Ramp3D',
+              'fields': {'height': 'tall'},
+            },
+            collision: PieceCollision.shape,
+          ),
+        ],
+      );
+      world.context.tiles.readText = (path) async => bad.encode();
+      final libraries = MeshLibraries.of(world.context);
+      await libraries.load(_path);
+      final tiles = GridTiles3D(library: _path)
+        ..setTile(0, -1, 0, 1)
+        ..link(libraries);
+      final box = tiles.solidParts.single as SolidBox;
+      expect(box.halfX, 1, reason: 'as its cell');
+      expect(libraries.errorOf(_path), isA<FormatException>());
+      expect(libraries.get(_path), isNotNull, reason: 'the rest of it still read');
+    });
+
+    test('two grids on one library, read from a scene, are each solid as itself', () async {
+      final library = _library(world.context.definitions);
+      world.context.tiles.readText = (path) async => library.encode();
+      final libraries = MeshLibraries.of(world.context);
+      await libraries.load(_path);
+      final definitions = world.context.definitions;
+      GridTiles3D read(GridTiles3D tiles) => (definitions.decode(definitions.encode(tiles)!)! as GridTiles3D)..link(libraries);
+      final a = read(GridTiles3D(library: _path)..setTile(0, -1, 0, 1));
+      final b = read(GridTiles3D(library: _path)..setTile(5, -1, 5, 1)..setTile(6, -1, 5, 1));
+      expect(a.revision, b.revision, reason: 'what made their keys the same');
+      expect(a.solidKey, isNot(b.solidKey));
+      // The engine keeps shapes by key: each its own.
+      final shapes = ColliderShapes3D();
+      final collider = Collider3D(shape: ColliderShape3D.matchShape);
+      final one = Vector3(1, 1, 1);
+      expect(identical(shapes.build(collider, one, source: a), shapes.build(collider, one, source: b)), isFalse);
+      expect(identical(shapes.build(collider, one, source: a), shapes.build(collider, one, source: a)), isTrue);
+    });
+
+    test('libraries no level uses are let go', () async {
+      final library = _library(world.context.definitions);
+      world.context.tiles.readText = (path) async => library.encode();
+      final libraries = MeshLibraries.of(world.context);
+      const other = 'assets/tiles/other.meshlib.json';
+      await libraries.load(_path);
+      await libraries.load(other);
+      libraries.releaseUnused([_path]);
+      expect(libraries.get(_path), isNotNull);
+      expect(libraries.get(other), isNull, reason: 'read again, when next asked for');
+    });
   });
 
   group('drawn', () {
@@ -268,6 +354,58 @@ void main() {
       expect(tiles().cells, hasLength(1));
       scope.history.redo();
       expect(tiles().cells, hasLength(4));
+    });
+
+    test('a drag on surfaces paints along the level it began on, not up the tiles it paints', () {
+      click(Vector3(1, 0, 1));
+      tiles().link(MeshLibraries.of(scope.world.context));
+      expect(tool().onSurfaces.value, isTrue);
+      press(Vector3(3, 0, 1));
+      move(Vector3(3.3, 0, 1.2)); // over the tile just painted
+      move(Vector3(3.6, 0, 1.4));
+      move(Vector3(5, 0, 1));
+      release(Vector3(5, 0, 1));
+      final cells = [for (final key in tiles().cells.keys) GridTiles3D.cellOf(key)];
+      expect(cells.map((c) => c.y).toSet(), {-1}, reason: 'one level: $cells');
+      expect(cells, hasLength(3));
+    });
+
+    test('a selected grid on another library is painted from that library', () async {
+      const other = 'assets/tiles/small.meshlib.json';
+      final small = MeshLibrary(
+        cellSize: 1,
+        items: [
+          MeshLibraryItem(id: 10, name: 'Brick', shape: Map<String, Object?>.from(scope.context.definitions.encode(Cube3D())!)),
+        ],
+      );
+      final text = _library(scope.context.definitions).encode();
+      scope.context.tiles.readText = (path) async => path == other ? small.encode() : text;
+      await MeshLibraries.of(scope.context).load(other);
+      final grid = scope.world.createEntityWithComponents([TransformComponent(), GridTiles3D(library: other)], name: 'Small');
+      scope.sceneState
+        ..registerEntity(grid)
+        ..selectEntity(grid);
+      tool().onSurfaces.value = false;
+      click(Vector3(1.5, 0, 0.5));
+      expect(tool().library.value, other);
+      final cells = grid.getComponent<GridTiles3D>()!;
+      expect(cells.tileAt(1, -1, 0), (item: 10, orientation: 0), reason: 'its piece, on its 1 m cells');
+      expect(scope.world.query([GridTiles3D]), hasLength(1), reason: 'no grid of another library made');
+    });
+
+    test('a stroke into an unnamed grid is undone like any other', () {
+      final grid = scope.world.createEntityWithComponents([TransformComponent(), GridTiles3D(library: _path)]);
+      scope.sceneState
+        ..registerEntity(grid)
+        ..selectEntity(grid);
+      tool().onSurfaces.value = false;
+      click(Vector3(1, 0, 1));
+      final cells = grid.getComponent<GridTiles3D>()!;
+      expect(cells.cells, hasLength(1));
+      scope.history.undo();
+      expect(cells.cells, isEmpty);
+      scope.history.redo();
+      expect(cells.cells, hasLength(1));
     });
 
     test('stacked on what is under the pointer', () {

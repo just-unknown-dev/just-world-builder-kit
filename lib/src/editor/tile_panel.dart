@@ -132,7 +132,11 @@ class _TilesPanelState extends State<_TilesPanel> {
                   EditorIconButton(icon: Icons.add, tooltip: 'New mesh library', onTap: _create),
                 ],
               ),
-              if (error != null) Text('Could not read it: $error', style: TextStyle(color: EditorTheme.error, fontSize: 11)),
+              if (error != null)
+                Text(
+                  library == null ? 'Could not read it: $error' : 'A piece of it could not be made: $error',
+                  style: TextStyle(color: EditorTheme.error, fontSize: 11),
+                ),
               if (library != null) ...[
                 const SizedBox(height: 6),
                 SignalBuilder<int>(

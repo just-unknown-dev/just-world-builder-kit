@@ -88,9 +88,11 @@ final class GridTilesRenderProvider extends RenderProvider<GridTiles3D> {
   static Map<int, Map<int, List<Matrix4>>> placements(GridTiles3D c, MeshLibrary library) {
     final size = library.cellSize;
     final out = <int, Map<int, List<Matrix4>>>{};
+    // By id, once: not a search of the items for every cell.
+    final items = {for (final i in library.items) i.id: i};
     for (final MapEntry(:key, :value) in c.cells.entries) {
       final tile = GridTiles3D.unpack(value);
-      final item = library.item(tile.item);
+      final item = items[tile.item];
       if (item == null) continue;
       final cell = GridTiles3D.cellOf(key);
       final block = GridTiles3D.keyOf(

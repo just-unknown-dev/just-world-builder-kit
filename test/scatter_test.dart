@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_game_engine/graphics_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
+import 'package:just_game_engine/physics_3d.dart';
 import 'package:just_game_engine_editor/just_game_engine_editor.dart';
 import 'package:just_world_builder_kit/editor.dart';
 import 'package:just_world_builder_kit/just_world_builder_kit.dart';
@@ -67,6 +68,47 @@ void main() {
       final capsule = scatter.solidParts.single as SolidCapsule;
       expect([capsule.radius, capsule.halfHeight, capsule.x, capsule.y], [0.4, 1.6, 4, -2]);
       expect(identical(scatter.solidParts, scatter.solidParts), isTrue);
+    });
+
+    test('a box piece turned or leant is solid as it is drawn; a new layer is as solid as its cone', () {
+      final scatter = Scatter3D(
+        layers: [ScatterLayer(name: 'Rocks', collision: ScatterCollision.box, colliderRadius: 1, colliderHeight: 2)],
+        instances: [ScatterInstance(layer: 0, position: Vector3(10, 0, 0), yaw: math.pi / 4)],
+      );
+      final hull = scatter.solidParts.single as SolidHull;
+      var far = 0.0, top = 0.0;
+      for (var i = 0; i < hull.points.length; i += 3) {
+        far = math.max(far, (hull.points[i] - 10).abs());
+        top = math.min(top, hull.points[i + 1]);
+      }
+      // An eighth of a turn: its corners reach out a metre's diagonal.
+      expect(far, closeTo(math.sqrt2, 1e-5));
+      expect(top, closeTo(-2, 1e-5), reason: 'standing on its spot, 2 m tall');
+      final upright = Scatter3D(
+        layers: [ScatterLayer(collision: ScatterCollision.box)],
+        instances: [_piece(0, 0)],
+      );
+      expect(upright.solidParts.single, isA<SolidBox>(), reason: 'not turned: a plain box');
+      final layer = ScatterLayer();
+      final (_, height) = ScatterRenderProvider.shapeOf(layer);
+      expect([layer.colliderHeight, layer.colliderRadius], [height, 0.4], reason: 'the cone it shows: 1.2 m, 0.4 m across its base');
+    });
+
+    test('two scatters read from a scene are each solid as itself', () {
+      final world = World()..initialize();
+      Graphics3D.registerSchemas(world.context);
+      WorldBuilderKit.install(world.context);
+      final definitions = world.context.definitions;
+      Scatter3D read(Scatter3D s) => definitions.decode(definitions.encode(s)!)! as Scatter3D;
+      List<ScatterLayer> trees() => [ScatterLayer(name: 'Trees', collision: ScatterCollision.capsule)];
+      final a = read(Scatter3D(layers: trees(), instances: [_piece(0, 0)]));
+      final b = read(Scatter3D(layers: trees(), instances: [_piece(20, 20), _piece(30, 30)]));
+      expect(a.revision, b.revision, reason: 'what made their keys the same');
+      expect(a.solidKey, isNot(b.solidKey));
+      final shapes = ColliderShapes3D();
+      final collider = Collider3D(shape: ColliderShape3D.matchShape);
+      final one = Vector3(1, 1, 1);
+      expect(identical(shapes.build(collider, one, source: a), shapes.build(collider, one, source: b)), isFalse);
     });
 
     test('a leaning piece leans with its ground', () {
@@ -201,6 +243,60 @@ void main() {
       expect(scatter().instances.length, first);
       scope.history.undo();
       expect(scatter().instances.length, greaterThan(first));
+    });
+
+    Entity scatterOf(List<ScatterLayer> layers, List<ScatterInstance> pieces, {String? name}) {
+      final e = scope.world.createEntityWithComponents([TransformComponent(), Scatter3D(layers: layers, instances: pieces)], name: name);
+      scope.sceneState
+        ..registerEntity(e)
+        ..selectEntity(e);
+      return e;
+    }
+
+    test('a stroke that erases as many as it scatters is still a step', () {
+      // So far apart that one piece fills the floor.
+      final e = scatterOf([ScatterLayer(name: 'Big', spacing: 100)], [_piece(0, 0)], name: 'Big');
+      final s = e.getComponent<Scatter3D>()!;
+      final original = s.instances.single;
+      modifiers = const ModifierKeys(shift: true);
+      press(Vector3(0, 0, 0));
+      modifiers = const ModifierKeys();
+      move(Vector3(4, 0, 0));
+      release(Vector3(4, 0, 0));
+      expect(s.instances, hasLength(1));
+      expect(identical(s.instances.single, original), isFalse, reason: 'another piece');
+      expect(scope.history.undoEntries, hasLength(1));
+      scope.history.undo();
+      expect(identical(s.instances.single, original), isTrue);
+    });
+
+    test('a scatter of no layers takes no pieces, and nothing throws', () {
+      final e = scatterOf([], []);
+      press(Vector3(0, 0, 0));
+      move(Vector3(4, 0, 0));
+      release(Vector3(4, 0, 0));
+      expect(e.getComponent<Scatter3D>()!.instances, isEmpty);
+    });
+
+    test('a stroke into an unnamed scatter is undone like any other', () {
+      final e = scatterOf(starterScatterLayers(), []);
+      press(Vector3(0, 0, 0));
+      release(Vector3(0, 0, 0));
+      final s = e.getComponent<Scatter3D>()!;
+      expect(s.instances, isNotEmpty);
+      scope.history.undo();
+      expect(s.instances, isEmpty);
+    });
+
+    test('a layer taken out takes its pieces; those after it keep theirs', () {
+      final e = scatterOf(starterScatterLayers(), [_piece(0, 0), _piece(5, 0, layer: 1), _piece(9, 0, layer: 2)]);
+      final s = e.getComponent<Scatter3D>()!;
+      removeScatterLayer(scope, s, 1);
+      expect(s.layers.map((l) => l.name), ['Grass', 'Trees']);
+      expect([for (final p in s.instances) (p.position.x, s.layers[p.layer].name)], [(0.0, 'Grass'), (9.0, 'Trees')]);
+      scope.history.undo();
+      expect(s.layers, hasLength(3));
+      expect(s.instances.map((p) => p.layer), [0, 1, 2]);
     });
   });
 }

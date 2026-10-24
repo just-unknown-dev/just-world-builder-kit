@@ -8,26 +8,56 @@ import 'spline_components.dart';
 import 'spline_path.dart';
 import 'spline_sweep.dart';
 
+/// Ties [c] to the [Spline3D] now on the entity it was last drawn on
+/// ([owners]): a spline put in another's place — removed, and the removal
+/// undone — is followed at once, in the editor too, where the link systems
+/// do not run.
+void _relink(Component c, Expando<Entity> owners) {
+  final owner = owners[c];
+  if (owner == null) return;
+  final current = owner.getComponent<Spline3D>();
+  switch (c) {
+    case SplineSweep3D() when !identical(c.spline, current):
+      c.spline = current;
+    case SplineInstances3D() when !identical(c.spline, current):
+      c.spline = current;
+    default:
+  }
+}
+
 /// Draws a [SplineSweep3D]: its swept mesh, in its material file or its
 /// colour, made again when the sweep or its spline changes.
 final class SweepRenderProvider extends RenderProvider<SplineSweep3D> {
   SweepRenderProvider();
 
+  /// How many plain colours' materials it keeps: the ones drawn last. One
+  /// still drawn stays alive with what draws it.
+  static const int colourLimit = 64;
+
+  // Least recently used first.
   final Map<int, GpuMaterial> _colours = {};
   ModelUploader? _uploader;
   MaterialLibrary? _library;
+  final Expando<Entity> _owners = Expando();
+
+  /// How many plain colours' materials it keeps now.
+  int get colourCount => _colours.length;
 
   @override
-  Object? revisionOf(SplineSweep3D sweep) => (
-    sweep.sweepKey,
-    sweep.material,
-    sweep.color.toARGB32(),
-    sweep.castShadows,
-    sweep.material.isEmpty ? null : _library?.revision,
-  );
+  Object? revisionOf(SplineSweep3D sweep) {
+    _relink(sweep, _owners);
+    return (
+      sweep.sweepKey,
+      sweep.material,
+      sweep.color.toARGB32(),
+      sweep.castShadows,
+      sweep.material.isEmpty ? null : _library?.revision,
+    );
+  }
 
   @override
   void build(RenderProviderContext context, Entity entity, SplineSweep3D sweep, RenderProviderOutput out) {
+    _owners[sweep] = entity;
     final spline = entity.getComponent<Spline3D>();
     if (spline == null) return;
     final mesh = SplineSweeper.meshFor(sweep, spline);
@@ -47,7 +77,13 @@ final class SweepRenderProvider extends RenderProvider<SplineSweep3D> {
       _colours.clear();
       _uploader = context.uploader;
     }
-    return _colours[color.toARGB32()] ??= context.uploader.material(materialData(color));
+    final key = color.toARGB32();
+    final material = _colours.remove(key) ?? context.uploader.material(materialData(color));
+    _colours[key] = material;
+    while (_colours.length > colourLimit) {
+      _colours.remove(_colours.keys.first);
+    }
+    return material;
   }
 
   /// A plain material of [color].
@@ -63,18 +99,23 @@ final class InstancesRenderProvider extends RenderProvider<SplineInstances3D> {
   InstancesRenderProvider();
 
   GraphicsModels? _models;
+  final Expando<Entity> _owners = Expando();
 
   @override
-  Object? revisionOf(SplineInstances3D c) => (
-    c.layoutKey,
-    c.model,
-    c.maxDistance,
-    c.castShadows,
-    c.model.isEmpty ? true : _models?.get(c.model) != null,
-  );
+  Object? revisionOf(SplineInstances3D c) {
+    _relink(c, _owners);
+    return (
+      c.layoutKey,
+      c.model,
+      c.maxDistance,
+      c.castShadows,
+      c.model.isEmpty ? true : _models?.get(c.model) != null,
+    );
+  }
 
   @override
   void build(RenderProviderContext context, Entity entity, SplineInstances3D c, RenderProviderOutput out) {
+    _owners[c] = entity;
     final spline = entity.getComponent<Spline3D>();
     _models = context.models;
     c.spline = spline;

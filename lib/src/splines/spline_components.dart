@@ -121,8 +121,16 @@ class Spline3D extends Component {
 
   SplineInterpolation interpolation;
 
-  /// Equal for as long as its shape stays the same.
-  Object get shapeKey => Object.hash(closed, interpolation, Object.hashAll([for (final p in points) p.key]));
+  /// Equal for as long as its shape stays the same. Read every frame by
+  /// what draws and moves along it, so it folds the points in without
+  /// making a list.
+  Object get shapeKey {
+    var key = Object.hash(closed, interpolation, points.length);
+    for (final p in points) {
+      key = Object.hash(key, p.key);
+    }
+    return key;
+  }
 }
 
 /// A cross-section a [SplineSweep3D] sweeps along its spline.
@@ -193,8 +201,11 @@ class SplineSweep3D extends Component implements SolidShapeSource {
   /// draws or collides it): runtime only.
   Spline3D? spline;
 
-  // The mesh the last sweep made, and what it was made from.
+  /// Runtime: the mesh the last sweep made ([SplineSweeper.meshFor]), and
+  /// the [sweepKey] it was made for. Never saved.
   SweptMesh? cached;
+
+  /// Runtime: the [sweepKey] [cached] was made for.
   Object? cachedKey;
 
   /// Equal while what it would sweep stays the same.
@@ -209,8 +220,18 @@ class SplineSweep3D extends Component implements SolidShapeSource {
     spline?.shapeKey,
   );
 
+  /// Equal while its solid shape stays the same: the [sweepKey] less what
+  /// only changes how it looks ([tiling]).
   @override
-  Object get solidKey => sweepKey;
+  Object get solidKey => Object.hash(
+    profile,
+    width,
+    height,
+    radius,
+    step,
+    sides,
+    spline?.shapeKey,
+  );
 
   @override
   List<SolidPart> get solidParts {
@@ -282,7 +303,10 @@ class SplineInstances3D extends Component {
 
 /// How a [PathFollower3D] goes along its spline.
 enum FollowMode {
-  /// To the end, then round again from the start.
+  /// To the end, then round again from the start. On a spline that does
+  /// not close, that is a jump back to its start, and a kinematic body's
+  /// jump flings what stands on it: give a route that carries riders a
+  /// closed spline, or [pingPong].
   loop,
 
   /// To the end and back, and again.
@@ -320,8 +344,13 @@ class PathFollower3D extends Component {
   /// Whether it turns to face the way it goes.
   bool faceAlong;
 
-  /// Runtime: how far along it is, which way it goes, how long it rests.
+  /// Runtime: how far along it is (metres); NaN until it starts. Never
+  /// saved.
   double travelled = double.nan;
+
+  /// Runtime: which way it goes, 1 on and -1 back. Never saved.
   double direction = 1;
+
+  /// Runtime: how many seconds it still rests at an end. Never saved.
   double resting = 0;
 }

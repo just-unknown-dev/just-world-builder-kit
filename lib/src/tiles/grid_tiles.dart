@@ -50,6 +50,11 @@ class GridTiles3D extends Component implements SolidShapeSource {
   MeshLibraries? _libraries;
   (Object, List<SolidPart>)? _solid;
 
+  // Equal only to itself: what keeps this grid's solid key its own. Every
+  // grid read from a scene has the same [revision], and grids on one
+  // library share it, so neither tells one grid's tiles from another's.
+  final Object _identity = Object();
+
   /// Ties it to its library in [libraries] — loading it, the first time.
   void link(MeshLibraries libraries) {
     _libraries = libraries;
@@ -102,8 +107,11 @@ class GridTiles3D extends Component implements SolidShapeSource {
     z: (point.z / cellSize).floor(),
   );
 
+  /// This grid's own, its [revision] and the library it is built from: a
+  /// physics engine that keeps shapes by key never mistakes another grid
+  /// for this one.
   @override
-  Object get solidKey => (revision, identityHashCode(loaded), library);
+  Object get solidKey => (_identity, revision, loaded);
 
   @override
   List<SolidPart> get solidParts {
@@ -134,9 +142,10 @@ abstract final class GridTileSolids {
     final out = <SolidPart>[];
     // Box cells, by row (y, z), each row's x in order.
     final rows = <(int, int), List<int>>{};
+    final items = {for (final i in library.items) i.id: i};
     for (final MapEntry(:key, :value) in tiles.cells.entries) {
       final tile = GridTiles3D.unpack(value);
-      final item = library.item(tile.item);
+      final item = items[tile.item];
       if (item == null || item.collision == PieceCollision.none) continue;
       final cell = GridTiles3D.cellOf(key);
       final shape = item.collision == PieceCollision.shape ? shapeOf?.call(item) : null;
@@ -238,6 +247,10 @@ class GridCellsFieldType extends FieldType<Map<int, int>> {
   static const int _version = 1;
   static const ZlibCodec _zlib = ZlibCodec();
 
+  /// The most bytes the cells may unpack to (64 MB, six million cells): a
+  /// damaged text fails at once instead of filling memory.
+  static const int maxBytes = 64 << 20;
+
   @override
   String get id => typeId;
 
@@ -267,7 +280,7 @@ class GridCellsFieldType extends FieldType<Map<int, int>> {
   /// The cells [text] holds; a [FormatException] when it holds none.
   static Map<int, int> decodeCells(String text) {
     if (text.isEmpty) return {};
-    final raw = _zlib.decode(base64Decode(text));
+    final raw = _zlib.decode(base64Decode(text), maxOutputSize: maxBytes);
     if (raw.isEmpty || raw[0] > _version || (raw.length - 1) % 10 != 0) {
       throw const FormatException('Not grid tile cells');
     }

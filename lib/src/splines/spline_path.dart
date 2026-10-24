@@ -21,7 +21,7 @@ final class SplinePath {
 
   /// [spline] sampled [perSegment] times between each two of its points.
   factory SplinePath.of(Spline3D spline, {int perSegment = 24}) {
-    final points = spline.points;
+    final points = _distinct(spline.points, spline.closed);
     final n = points.length;
     if (n < 2) {
       return SplinePath._(
@@ -40,7 +40,7 @@ final class SplinePath {
       final last = s == segments - 1;
       for (var k = 0; k < perSegment + (last && !closed ? 1 : 0); k++) {
         final t = k / perSegment;
-        positions.add(_point(spline, s, t));
+        positions.add(_point(points, closed, spline.interpolation, s, t));
         final a = points[s].roll, b = points[(s + 1) % n].roll;
         rolls.add(a + (b - a) * t);
       }
@@ -52,11 +52,26 @@ final class SplinePath {
     // Tangents from the samples round each.
     final count = positions.length;
     final tangents = <Vector3>[];
+    // How many samples at the start have no way of their own (they sit on
+    // one spot): they take the first way there is.
+    var leading = 0;
     for (var i = 0; i < count; i++) {
       final before = i == 0 ? (closed ? positions[count - 2] : positions[0]) : positions[i - 1];
       final after = i == count - 1 ? (closed ? positions[1] : positions[count - 1]) : positions[i + 1];
       final t = after - before;
-      tangents.add(t.lengthSquared < 1e-18 ? (tangents.isEmpty ? Vector3(0, 0, 1) : Vector3.copy(tangents.last)) : (t..normalize()));
+      if (t.lengthSquared >= 1e-18) {
+        tangents.add(t..normalize());
+      } else if (leading == tangents.length) {
+        leading++;
+        tangents.add(Vector3(0, 0, 1));
+      } else {
+        tangents.add(Vector3.copy(tangents.last));
+      }
+    }
+    if (leading > 0 && leading < count) {
+      for (var i = 0; i < leading; i++) {
+        tangents[i] = Vector3.copy(tangents[leading]);
+      }
     }
     // Rotation-minimising frames (double reflection), from up as near the
     // world's up as the first tangent allows.
@@ -76,11 +91,12 @@ final class SplinePath {
       ups.add(_square(next, tangents[i + 1]));
     }
     // Closed: what the frames turned on the way round, spread back along
-    // it so the end meets the start.
+    // it so the end meets the start. [twist] turns the last frame onto the
+    // first: frame i takes its share of it.
     if (closed) {
       final twist = _angleAbout(ups.last, ups.first, tangents.first);
       for (var i = 0; i < count; i++) {
-        _turnAbout(ups[i], tangents[i], -twist * i / (count - 1));
+        _turnAbout(ups[i], tangents[i], twist * i / (count - 1));
       }
     }
     for (var i = 0; i < count; i++) {
@@ -216,11 +232,27 @@ final class SplinePath {
     Quaternion.axisAngle(axis, angle).rotate(v);
   }
 
-  // The point [t] of the way along segment [s] (from point s to s + 1).
-  static Vector3 _point(Spline3D spline, int s, double t) {
-    final points = spline.points;
+  /// Two points nearer than this (squared, metres) are the same point.
+  static const double _samePlace = 1e-8;
+
+  /// [points] less each one at the same place as the one before it — and,
+  /// round a [closed] spline, a last one back on the first: a repeated
+  /// point makes no curve, and Catmull-Rom would loop back through it.
+  static List<SplinePoint> _distinct(List<SplinePoint> points, bool closed) {
+    final out = <SplinePoint>[];
+    for (final p in points) {
+      if (out.isEmpty || (p.position - out.last.position).lengthSquared > _samePlace) out.add(p);
+    }
+    if (closed && out.length > 1 && (out.last.position - out.first.position).lengthSquared <= _samePlace) {
+      out.removeLast();
+    }
+    return out;
+  }
+
+  // The point [t] of the way along segment [s] (from point s to s + 1) of
+  // [points], [closed] when they run round.
+  static Vector3 _point(List<SplinePoint> points, bool closed, SplineInterpolation interpolation, int s, double t) {
     final n = points.length;
-    final closed = spline.closed && n >= 3;
     Vector3 at(int i) {
       if (closed) return points[((i % n) + n) % n].position;
       if (i < 0) return points[0].position * 2 - points[1].position;
@@ -229,7 +261,7 @@ final class SplinePath {
     }
 
     final p0 = at(s - 1), p1 = at(s), p2 = at(s + 1), p3 = at(s + 2);
-    switch (spline.interpolation) {
+    switch (interpolation) {
       case SplineInterpolation.linear:
         return p1 + (p2 - p1) * t;
       case SplineInterpolation.catmullRom:

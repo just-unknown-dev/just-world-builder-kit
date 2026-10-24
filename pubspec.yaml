@@ -1,12 +1,13 @@
 name: just_world_builder_kit
 description: "World building for just_game_engine in 3D: blockout, splines, 3D grid tiles, terrain and scatter, with the Level Designer tools that make them."
-version: 0.1.0
+version: 0.1.0-beta.1
 publish_to: none
 homepage: https://engine.justunknown.com/
 
 environment:
   sdk: ^3.12.2
-  flutter: ">=3.41.0"
+  # just_game_engine's 3-D graphics need it.
+  flutter: ">=3.47.1"
 
 dependencies:
   flutter:

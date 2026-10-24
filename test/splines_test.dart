@@ -89,6 +89,37 @@ void main() {
       final loop = SplinePath.of(_spline([[0, 0, 0], [10, 0, 0], [10, 0, 10], [0, 0, 10]], closed: true));
       expect(InstancesRenderProvider.placements(SplineInstances3D(spacing: 4), loop), hasLength(10), reason: 'none twice where it meets itself');
     });
+
+    test('a closed loop over hills and dips: its frames meet where it closes', () {
+      // Not level: the frames turn on the way round, and that turn is
+      // spread back along it.
+      final loop = _spline([
+        [10, 0, 0],
+        [3, -6, 8],
+        [-7, 2, 5],
+        [-8, -5, -6],
+        [2, 4, -9],
+      ], closed: true, curve: SplineInterpolation.catmullRom);
+      final path = SplinePath.of(loop);
+      expect(path.ups.first.dot(path.ups.last), greaterThan(1 - 1e-9), reason: 'no twist at the seam');
+      final before = path.at(path.length - 1e-3), after = path.at(1e-3);
+      expect(before.up.dot(after.up), greaterThan(0.999), reason: 'smooth across it');
+    });
+
+    test('a point given twice is one: no fold back, the way on from the start', () {
+      final twice = SplinePath.of(_spline([[0, 0, 0], [0, 0, 0], [10, 0, 0], [10, 0, 10]], curve: SplineInterpolation.catmullRom));
+      final once = SplinePath.of(_spline([[0, 0, 0], [10, 0, 0], [10, 0, 10]], curve: SplineInterpolation.catmullRom));
+      expect(twice.positions, hasLength(once.positions.length));
+      expect(twice.length, closeTo(once.length, 1e-9));
+      for (var d = 0.0; d < once.length; d += 0.5) {
+        expect(twice.at(d).position.x, greaterThanOrEqualTo(-1e-9), reason: 'never back past its start');
+      }
+      final straight = SplinePath.of(_spline([[0, 0, 0], [0, 0, 0], [10, 0, 0]]));
+      expect(straight.at(0).tangent.x, closeTo(1, 1e-9), reason: 'facing the way it goes');
+      // Round a closed one, a last point back on the first is the first.
+      final square = _spline([[0, 0, 0], [10, 0, 0], [10, 0, 10], [0, 0, 10], [0, 0, 0]], closed: true);
+      expect(SplinePath.of(square).length, closeTo(40, 1e-9));
+    });
   });
 
   group('a sweep', () {
@@ -143,6 +174,15 @@ void main() {
       final parts = sweep.solidParts;
       expect(parts.single, isA<SolidMesh>());
       expect((parts.single as SolidMesh).triangleCount, 84);
+    });
+
+    test('its solid key changes with its shape, not with how it looks', () {
+      final sweep = SplineSweep3D(profile: SweepProfile.road)..spline = _spline([[0, 0, 0], [10, 0, 0]]);
+      final key = sweep.solidKey;
+      sweep.tiling = 4;
+      expect(sweep.solidKey, key, reason: 'its collider is not made again for its texture');
+      sweep.width = 5;
+      expect(sweep.solidKey, isNot(key));
     });
   });
 
@@ -303,6 +343,27 @@ void main() {
       expect(scope.history.undoEntries, hasLength(1));
       scope.history.undo();
       expect(scope.world.entities.where((e) => e.hasComponent<Spline3D>()), isEmpty);
+    });
+
+    test('closed by a click on its first point, that once; a spot clicked twice is one point', () {
+      session.setTool(SplineTool.toolId);
+      for (final p in [Vector3(0, 0, 0), Vector3(8, 0, 0), Vector3(8, 0, 8)]) {
+        click(p);
+      }
+      click(Vector3(0, 0, 0));
+      final first = withSpline().getComponent<Spline3D>()!;
+      expect(first.closed, isTrue);
+      expect(tool().closed.value, isFalse, reason: 'the option as it was');
+
+      click(Vector3(0, 0, 12));
+      click(Vector3(0, 0, 12));
+      expect(tool().points, hasLength(1), reason: 'the same spot again adds nothing');
+      click(Vector3(8, 0, 12));
+      click(Vector3(8, 0, 18));
+      session.handleKey(LogicalKeyboardKey.enter, gridSize: 32);
+      final second = scope.world.entities.where((e) => e.hasComponent<Spline3D>()).last.getComponent<Spline3D>()!;
+      expect(identical(second, first), isFalse);
+      expect([second.points.length, second.closed], [3, false]);
     });
 
     test('a platform route: a path and the platform that rides it', () {

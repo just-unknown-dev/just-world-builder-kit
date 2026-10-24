@@ -21,8 +21,9 @@ final class TerrainChunkMesh {
 /// Builds a terrain's surface a chunk at a time: a vertex per sample at
 /// its height (+Y is down), its normal from its neighbours, texture
 /// coordinates in metres, and in its colour either the four layers'
-/// weights (for a layered material) or the layers' colours mixed. A cell
-/// with a hole at any corner is left out.
+/// weights (for a layered material) or the layers' colours mixed. A
+/// triangle with a hole at any of its corners is left out, as the height
+/// field it is solid as leaves it out.
 abstract final class TerrainMesher {
   /// Chunk ([cx], [cz]) — [chunkCells] cells a side — of [data], for a
   /// terrain [size] metres a side about its middle. [colors] mixes the
@@ -87,12 +88,19 @@ abstract final class TerrainMesher {
     final indices = <int>[];
     for (var j = j0; j < j1; j++) {
       for (var i = i0; i < i1; i++) {
-        if (holes && (data.isHole(i, j) || data.isHole(i + 1, j) || data.isHole(i, j + 1) || data.isHole(i + 1, j + 1))) {
+        final a = (j - j0) * w + (i - i0), b = a + 1, c = a + w, e = c + 1;
+        // Facing up, wound anticlockwise seen from above; split corner b
+        // to corner c, as the height field the terrain is solid as is.
+        // A hole at any corner of a triangle leaves that triangle out —
+        // the height field's rule — so the ground drawn is the ground
+        // stood on.
+        if (!holes) {
+          indices.addAll([a, b, c, b, e, c]);
           continue;
         }
-        final a = (j - j0) * w + (i - i0), b = a + 1, c = a + w, e = c + 1;
-        // Facing up, wound anticlockwise seen from above.
-        indices.addAll([a, b, c, b, e, c]);
+        final hb = data.isHole(i + 1, j), hc = data.isHole(i, j + 1);
+        if (!hb && !hc && !data.isHole(i, j)) indices.addAll([a, b, c]);
+        if (!hb && !hc && !data.isHole(i + 1, j + 1)) indices.addAll([b, e, c]);
       }
     }
     return TerrainChunkMesh(vertices, Uint32List.fromList(indices), bounds);

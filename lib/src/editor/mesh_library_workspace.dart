@@ -130,7 +130,7 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
   void addShape(String name, Primitive3D Function(double size) make) => edit((l) {
     l.items.add(
       MeshLibraryItem(
-        id: l.nextId,
+        id: l.takeId(),
         name: name,
         shape: Map<String, Object?>.from(widget.definitions.encode(make(l.cellSize))!),
         collision: name == 'Block' ? PieceCollision.box : PieceCollision.shape,
@@ -141,7 +141,7 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
   /// Adds a model piece.
   void addModel(String model) => edit((l) {
     l.items.add(
-      MeshLibraryItem(id: l.nextId, name: model.split('/').last.split('.').first, model: model),
+      MeshLibraryItem(id: l.takeId(), name: model.split('/').last.split('.').first, model: model),
     );
   });
 
@@ -289,8 +289,8 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
           ),
           EditorIconButton(
             icon: Icons.delete_outline,
-            tooltip: 'Remove (tiles of it are left empty)',
-            onTap: () => edit((l) => l.items.removeWhere((x) => x.id == item.id)),
+            tooltip: 'Remove (tiles of it are left empty; its number is never given to another piece)',
+            onTap: () => edit((l) => l.remove(item.id)),
           ),
         ],
       ),
