@@ -1,8 +1,10 @@
 {
-  "category": "kits",
-  "dependencies": {
-    "just_game_engine_editor": "^0.1.0-dev.1"
+  "author": {
+    "name": "Just Unknown",
+    "url": "https://justunknown.com"
   },
+  "category": "kits",
+  "description": "World building for 3-D games: blockout shapes, splines, 3-D grid tiles, terrain and scatter, with the Level Designer tools that make them.",
   "editor": {
     "editorOnlyLibraries": [
       "editor.dart",
@@ -18,9 +20,17 @@
   },
   "id": "just_world_builder_kit",
   "kind": "kit",
+  "license": {
+    "file": "LICENSE",
+    "spdx": "BSD-3-Clause"
+  },
   "name": "World Builder Kit",
+  "previews": [
+    "store/card.png"
+  ],
   "requires": {
-    "just_game_engine": "^2.0.0"
+    "just_game_engine": "^2.0.0-dev.2",
+    "just_game_engine_editor": "^0.1.0-dev.1"
   },
   "runtime": {
     "componentTypes": [
@@ -45,5 +55,12 @@
     }
   },
   "schema": 1,
-  "version": "0.1.0-dev"
+  "stage": "beta",
+  "summary": "Build 3-D levels: blockout, splines, grid tiles, terrain and scatter.",
+  "tags": [
+    "3d",
+    "level design",
+    "terrain"
+  ],
+  "version": "0.1.0"
 }

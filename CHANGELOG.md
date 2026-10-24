@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0-dev
+## 0.1.0
 
 First version: world building for just_game_engine in 3D.
 
