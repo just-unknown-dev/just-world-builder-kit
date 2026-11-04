@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:ui' show Color;
 
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
+import 'package:just_game_engine_formats/just_game_engine_formats.dart'
+    show V10ToV11;
 
 /// How a tile is solid.
 enum PieceCollision {
@@ -32,7 +34,7 @@ final class MeshLibraryItem {
     this.scale = 1,
   }) : offset = offset ?? Vector3.zero();
 
-  /// Which it is, in a [GridTiles3D]'s cells: 1 and up, never reused
+  /// Which it is, in a [GridTiles3DComponent]'s cells: 1 and up, never reused
   /// ([MeshLibrary.nextId]).
   final int id;
 
@@ -42,7 +44,7 @@ final class MeshLibraryItem {
   String model;
 
   /// The shape it shows when it has no model: a shape component as a
-  /// scene saves it (`{"type": "Cube3D", ...}`).
+  /// scene saves it (`{"type": "Cube3DComponent", ...}`).
   Map<String, Object?>? shape;
 
   PieceCollision collision;
@@ -90,7 +92,7 @@ final class MeshLibraryItem {
   }
 }
 
-/// The pieces a [GridTiles3D] is built from — floors, walls, ramps, the
+/// The pieces a [GridTiles3DComponent] is built from — floors, walls, ramps, the
 /// models of a kit of parts — and how big its cells are: a
 /// `.meshlib.json` file.
 final class MeshLibrary {
@@ -103,7 +105,10 @@ final class MeshLibrary {
 
   /// The format's name and version, written in every file.
   static const String format = 'just.meshlib';
-  static const int version = 1;
+  ///
+  /// Version 1 named the engine's shapes as scene format 10 did (`Cube3D`);
+  /// [parse] reads them under their names now (`Cube3DComponent`).
+  static const int version = 2;
 
   /// How big a cell is, along each side (metres).
   double cellSize;
@@ -162,9 +167,19 @@ final class MeshLibrary {
       items: [
         if (items is List)
           for (final i in items)
-            if (i is Map) MeshLibraryItem.fromJson(Map<String, Object?>.from(i)),
+            if (i is Map) MeshLibraryItem.fromJson(_upgraded(Map<String, Object?>.from(i), v)),
       ],
     );
+  }
+
+  /// [item], read at version [from], with its shape named as now.
+  static Map<String, Object?> _upgraded(Map<String, Object?> item, int from) {
+    final shape = item['shape'];
+    if (from < 2 && shape is Map) {
+      final type = shape['type'];
+      item['shape'] = {...shape, 'type': V10ToV11.renames[type] ?? type};
+    }
+    return item;
   }
 
   /// A library of the engine's shapes, sized to cells of [cellSize]: a
@@ -172,7 +187,7 @@ final class MeshLibrary {
   static MeshLibrary starter(ComponentDefinitionRegistry definitions, {double cellSize = 2}) {
     final c = cellSize;
     const slab = 0.2;
-    Map<String, Object?> shape(Primitive3D p) => Map<String, Object?>.from(definitions.encode(p)!);
+    Map<String, Object?> shape(Primitive3DComponent p) => Map<String, Object?>.from(definitions.encode(p)!);
     return MeshLibrary(
       cellSize: c,
       items: [
@@ -182,34 +197,34 @@ final class MeshLibrary {
         MeshLibraryItem(
           id: 1,
           name: 'Floor',
-          shape: shape(Cube3D(width: c, height: slab, depth: c, color: const Color(0xFF9FA8B3))),
+          shape: shape(Cube3DComponent(width: c, height: slab, depth: c, color: const Color(0xFF9FA8B3))),
           collision: PieceCollision.shape,
           offset: Vector3(0, c / 2 - slab / 2, 0),
         ),
-        MeshLibraryItem(id: 2, name: 'Block', shape: shape(Cube3D(width: c, height: c, depth: c, color: const Color(0xFFB0BEC5)))),
+        MeshLibraryItem(id: 2, name: 'Block', shape: shape(Cube3DComponent(width: c, height: c, depth: c, color: const Color(0xFFB0BEC5)))),
         MeshLibraryItem(
           id: 3,
           name: 'Wall',
-          shape: shape(Cube3D(width: c, height: c, depth: slab, color: const Color(0xFFD7CCC8))),
+          shape: shape(Cube3DComponent(width: c, height: c, depth: slab, color: const Color(0xFFD7CCC8))),
           collision: PieceCollision.shape,
           offset: Vector3(0, 0, -(c / 2 - slab / 2)),
         ),
         MeshLibraryItem(
           id: 4,
           name: 'Ramp',
-          shape: shape(Ramp3D(width: c, height: c, depth: c, color: const Color(0xFFA1887F))),
+          shape: shape(Ramp3DComponent(width: c, height: c, depth: c, color: const Color(0xFFA1887F))),
           collision: PieceCollision.shape,
         ),
         MeshLibraryItem(
           id: 5,
           name: 'Stairs',
-          shape: shape(Stairs3D(width: c, height: c, depth: c, steps: 4, color: const Color(0xFFBCAAA4))),
+          shape: shape(Stairs3DComponent(width: c, height: c, depth: c, steps: 4, color: const Color(0xFFBCAAA4))),
           collision: PieceCollision.shape,
         ),
         MeshLibraryItem(
           id: 6,
           name: 'Pillar',
-          shape: shape(Cylinder3D(radius: c * 0.15, height: c, color: const Color(0xFFCFD8DC))),
+          shape: shape(Cylinder3DComponent(radius: c * 0.15, height: c, color: const Color(0xFFCFD8DC))),
           collision: PieceCollision.shape,
         ),
       ],
@@ -231,7 +246,7 @@ final class MeshLibraries {
   final Map<String, MeshLibrary?> _loaded = {};
   final Map<String, Future<MeshLibrary?>> _loading = {};
   final Map<String, Object> _errors = {};
-  final Map<(String, int), Primitive3D?> _shapes = {};
+  final Map<(String, int), Primitive3DComponent?> _shapes = {};
   int _revision = 0;
 
   /// Bumped whenever one finishes loading or changes.
@@ -302,13 +317,13 @@ final class MeshLibraries {
   /// [item]'s shape, from the library at [path]; null for a model piece,
   /// or one whose shape could not be made (why is [errorOf] the path):
   /// it is then solid as its cell, and not drawn.
-  Primitive3D? shapeOf(String path, MeshLibraryItem item) {
+  Primitive3DComponent? shapeOf(String path, MeshLibraryItem item) {
     final json = item.shape;
     if (item.model.isNotEmpty || json == null) return null;
     return _shapes.putIfAbsent((path, item.id), () {
       try {
         final decoded = context.definitions.decode(Map<String, dynamic>.from(json));
-        return decoded is Primitive3D ? decoded : null;
+        return decoded is Primitive3DComponent ? decoded : null;
       } on Object catch (e) {
         _errors[path] = FormatException('Piece ${item.id} (${item.name}): $e');
         return null;

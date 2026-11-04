@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:just_editor_core/just_editor_core.dart';
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
 import '../tiles/mesh_library.dart';
@@ -42,12 +42,12 @@ class MeshLibraryWorkspace extends StatefulWidget {
 }
 
 /// The shapes a piece can be, made to fill a cell of [size].
-final List<(String, Primitive3D Function(double size))> meshLibraryShapes = [
-  ('Block', (s) => Cube3D(width: s, height: s, depth: s)),
-  ('Ramp', (s) => Ramp3D(width: s, height: s, depth: s)),
-  ('Stairs', (s) => Stairs3D(width: s, height: s, depth: s, steps: 4)),
-  ('Pillar', (s) => Cylinder3D(radius: s * 0.15, height: s)),
-  ('Arch', (s) => Arch3D(radius: s / 2, thickness: s * 0.15, depth: s)),
+final List<(String, Primitive3DComponent Function(double size))> meshLibraryShapes = [
+  ('Block', (s) => Cube3DComponent(width: s, height: s, depth: s)),
+  ('Ramp', (s) => Ramp3DComponent(width: s, height: s, depth: s)),
+  ('Stairs', (s) => Stairs3DComponent(width: s, height: s, depth: s, steps: 4)),
+  ('Pillar', (s) => Cylinder3DComponent(radius: s * 0.15, height: s)),
+  ('Arch', (s) => Arch3DComponent(radius: s / 2, thickness: s * 0.15, depth: s)),
 ];
 
 /// The state of a [MeshLibraryWorkspace]; public for tests.
@@ -127,7 +127,7 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
   }
 
   /// Adds a shape piece, filling a cell.
-  void addShape(String name, Primitive3D Function(double size) make) => edit((l) {
+  void addShape(String name, Primitive3DComponent Function(double size) make) => edit((l) {
     l.items.add(
       MeshLibraryItem(
         id: l.takeId(),

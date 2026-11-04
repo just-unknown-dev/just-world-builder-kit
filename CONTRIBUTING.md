@@ -34,14 +34,14 @@ A bug report should have:
 - a clear title;
 - steps to reproduce, and what you expected instead of what happened;
 - the output of `flutter --version`, and the platform (Android, iOS, Linux, macOS, Windows, web);
-- the scene's `.scene.json`, or the smallest part of it that shows the problem: the entity with its `Spline3D`, `SplineSweep3D`, `GridTiles3D`, `Terrain3D` or `Scatter3D`, and its `RigidBody3D` and `Collider3D`;
+- the scene's `.scene.json`, or the smallest part of it that shows the problem: the entity with its `Spline3DComponent`, `SplineSweep3DComponent`, `GridTiles3DComponent`, `Terrain3DComponent` or `Scatter3DComponent`, and its `RigidBody3DComponent` and `Collider3DComponent`;
 - the files the piece reads: the `.meshlib.json` for tiles, the `.jterrain` for a terrain (zipped: it is binary);
 - for something that draws wrongly, a screenshot, and whether the piece is solid where it is drawn;
 - for an editor bug, the tool (Block, Floor, Ramp, Spline, Tiles, Terrain, Scatter), what you did with it, and whether an undo put it back.
 
 Bugs often belong somewhere else:
 
-- The kit says what is solid; the engine's 3-D physics makes it so. A collider bug you can show with the engine's own shapes (a `Cube3D` with a `Collider3D` set to match its shape) belongs in [just_game_engine](https://github.com/just-unknown-dev/just-game-engine/issues), and wrong physics with no kit component involved in [just_physics_engine](https://github.com/just-unknown-dev/just-physics-engine/issues), which runs Jolt.
+- The kit says what is solid; the engine's 3-D physics makes it so. A collider bug you can show with the engine's own shapes (a `Cube3DComponent` with a `Collider3DComponent` set to match its shape) belongs in [just_game_engine](https://github.com/just-unknown-dev/just-game-engine/issues), and wrong physics with no kit component involved in [just_physics_engine](https://github.com/just-unknown-dev/just-physics-engine/issues), which runs Jolt.
 - A model, light or material that draws wrongly with no kit component involved belongs in [just_graphics_engine](https://github.com/just-unknown-dev/just-graphics-engine/issues).
 - A `.jterrain`, cells or pieces field that will not unpack, where the zlib stream itself is at fault, belongs in `just_deflate`.
 - An editor bug you can show without `WorldBuilderModule` (the Level Designer itself, the inspector, undo) belongs in `just_game_engine_editor`.
@@ -103,10 +103,10 @@ The third-person template depends on this package. Its game adds `WorldBuilderKi
 |------|----------|
 | `lib/just_world_builder_kit.dart` | The runtime library, safe in a release build on every platform, the web included |
 | `lib/src/world_builder_kit.dart` | `WorldBuilderKit`: the extension, the systems and `ready` |
-| `lib/src/splines/` | `Spline3D`, `SplineSweep3D`, `SplineInstances3D`, `PathFollower3D`; `SplinePath` (sampling, frames); `SplineSweeper` (the swept mesh); their schemas, render providers and systems |
-| `lib/src/tiles/` | `GridTiles3D` and its packed cells; `GridOrientations` (the 24 turns); `MeshLibrary` (the `.meshlib.json` format) and `MeshLibraries` (what one engine has loaded); `GridTileSolids`; the render provider |
-| `lib/src/terrain/` | `TerrainData` (the `.jterrain` format), `TerrainBrush`, `TerrainMesher`, `Terrain3D` and `TerrainFiles` (what one engine has loaded); the render provider and link system |
-| `lib/src/scatter/` | `Scatter3D`, its layers and packed pieces; `ScatterSpacing`, `ScatterBrush`; the render provider |
+| `lib/src/splines/` | `Spline3DComponent`, `SplineSweep3DComponent`, `SplineInstances3DComponent`, `PathFollower3DComponent`; `SplinePath` (sampling, frames); `SplineSweeper` (the swept mesh); their definitions, render providers and systems |
+| `lib/src/tiles/` | `GridTiles3DComponent` and its packed cells; `GridOrientations` (the 24 turns); `MeshLibrary` (the `.meshlib.json` format) and `MeshLibraries` (what one engine has loaded); `GridTileSolids`; the render provider |
+| `lib/src/terrain/` | `TerrainData` (the `.jterrain` format), `TerrainBrush`, `TerrainMesher`, `Terrain3DComponent` and `TerrainFiles` (what one engine has loaded); the render provider and link system |
+| `lib/src/scatter/` | `Scatter3DComponent`, its layers and packed pieces; `ScatterSpacing`, `ScatterBrush`; the render provider |
 | `lib/editor.dart`, `lib/src/editor/` | Design time only: `WorldBuilderModule`; the Block, Floor, Ramp, Spline, Tiles, Terrain and Scatter tools; spline handles and overlay; the Tiles, Terrain and Scatter panels; the mesh library workspace; the inspector editors; `WorldBuilderRayTest` (picking the kit's pieces) |
 | `just_store.json` | The Asset Store manifest: the extension and module a game registers, the component types the kit adds, the setup code shown after installing it, and the editor-only libraries. The `just` CLI's release check reads that last list |
 | `test/` | One file per piece (`splines_test.dart`, `spline_render_test.dart`, `tiles_test.dart`, `terrain_test.dart`, `scatter_test.dart`), `blockout_test.dart` (blockout, and the library boundary) and `panels_test.dart` (the side panel's sections) |
@@ -114,10 +114,10 @@ The third-person template depends on this package. Its game adds `WorldBuilderKi
 A few rules hold the package together. Keep them:
 
 - **The runtime never reaches the editor.** Nothing that `lib/just_world_builder_kit.dart` reaches imports `dart:io`, `just_editor_core`, `just_game_engine_editor` or a file under `lib/src/editor/`. Files are read through the engine's seams (`EngineContext.bundle`, `EngineContext.tiles.readText`); the editor module points them at the project. `just_store.json` lists `editor.dart` and `src/editor/` as editor-only; keep it in step. `test/blockout_test.dart` checks the boundary.
-- **3-D graphics and physics come through the engine.** The kit imports `package:just_game_engine/graphics_3d.dart` (render providers) and, in the editor, `package:just_game_engine/physics_3d.dart`, never `just_graphics_engine`, `just_physics_engine` or `just_jolt`. A piece is drawn by a `RenderProvider` and is solid as a `SolidShapeSource` that a `Collider3D` set to match its shape reads.
+- **3-D graphics and physics come through the engine.** The kit imports `package:just_game_engine/just_game_engine_3d.dart` (render providers, and the editor's 3-D tools), never `just_graphics_engine`, `just_physics_engine` or `just_jolt`. A piece is drawn by a `RenderProvider` and is solid as a `SolidShapeSource` that a `Collider3DComponent` set to match its shape reads.
 - **A solid key is its piece's own.** The engine keeps the shapes it builds by `solidKey`, across entities and levels. A key must change whenever the solid shape does and must never equal another piece's unless the shapes are the same: build it from the content, or from a token the instance owns and a revision it bumps. Never from a count every loaded instance shares, nor from `identityHashCode`.
-- **Every saved component has a `ComponentSchema`** with 3-D hints (`Dimensions.threeD`, group "World Builder"), and its type is listed under `runtime.componentTypes` in `just_store.json`. The schemas are getters, so `WorldBuilderKit.extension`, a `RefreshableExtension`, can rebuild them after a hot reload. Write new ones as getters too.
-- **Saved scenes and files must keep loading.** Never change a schema's `type` or `id`, a field's name, or the meaning of a byte in the packed cells, pieces or `.jterrain` files; a new field needs nothing more, because a scene saved without it loads the constructor's default. Bad data fails with a `FormatException` that says what is wrong, never a `TypeError` or a crash in a system's update.
+- **Every saved component has a `ComponentDefinition`** with 3-D hints (`Dimensions.threeD`, group "World Builder"), and its type is listed under `runtime.componentTypes` in `just_store.json`. The definitions are getters, so `WorldBuilderKit.extension`, a `RefreshableExtension`, can rebuild them after a hot reload. Write new ones as getters too.
+- **Saved scenes and files must keep loading.** Never change a definition's `type` or `id`, a field's name, or the meaning of a byte in the packed cells, pieces or `.jterrain` files; a new field needs nothing more, because a scene saved without it loads the constructor's default. Bad data fails with a `FormatException` that says what is wrong, never a `TypeError` or a crash in a system's update.
 - **Only settings are saved.** What the systems and providers keep (a sweep's mesh, a follower's progress, a grid's loaded library, revisions) is runtime state and never written to a saved field.
 - **Metres, and up is -Y**, as everywhere in the engine. Heights in a `.jterrain` are measured up.
 - **One undo step per stroke.** A tool's drag — a terrain stroke, a run of tiles, a scatter stroke, a handle dragged — is one entry in the editor's history, and undo puts it back exactly.
@@ -138,7 +138,7 @@ flutter test test/terrain_test.dart
 
 **The library boundary.** `test/blockout_test.dart` reads every runtime file under `lib/` and fails if one names `just_editor_core`, `just_game_engine_editor` or `src/editor/`, and checks that the editor part builds on `just_editor_core` alone.
 
-**Writing tests.** There is no shared helper library. For a piece's data, build it by hand and check what it hands on: `solidParts`, a `ColliderShapes3D` built from it, `SplinePath` frames, `TerrainMesher.chunk`. For drawing, follow `test/spline_render_test.dart`: an `Engine` with `Graphics3D(device: NullGpuDevice(shaders: rendererNullShaders))` and `renderer.update(view)`. For a tool, follow the `editor` groups: an `EditorScope` with `WorldBuilderModule`, a `LevelDesignerSession` with an `OrbitFlyEditorView`, and presses, moves and releases at world points projected to the screen, then check `scope.history`. A tool that reads or writes files gets a temporary project folder (`WorldBuilderModule(root: ...)`).
+**Writing tests.** There is no shared helper library. For a piece's data, build it by hand and check what it hands on: `solidParts`, a `Collider3DShapes` built from it, `SplinePath` frames, `TerrainMesher.chunk`. For drawing, follow `test/spline_render_test.dart`: an `Engine` with `Graphics3D(device: NullGpuDevice(shaders: rendererNullShaders))` and `renderer.update(view)`. For a tool, follow the `editor` groups: an `EditorScope` with `WorldBuilderModule`, a `LevelDesignerSession` with an `OrbitFlyEditorView`, and presses, moves and releases at world points projected to the screen, then check `scope.history`. A tool that reads or writes files gets a temporary project folder (`WorldBuilderModule(root: ...)`).
 
 ---
 

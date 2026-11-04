@@ -5,7 +5,7 @@ import 'package:just_game_engine/just_game_engine.dart';
 import 'spline_components.dart';
 import 'spline_path.dart';
 
-/// Moves each [PathFollower3D] along its path's [Spline3D]: [speed] metres
+/// Moves each [PathFollower3DComponent] along its path's [Spline3DComponent]: [speed] metres
 /// a second, resting at the ends, looping, going back and forth or
 /// stopping as its mode says. Runs before physics, so a kinematic body is
 /// carried, and what stands on it with it.
@@ -16,7 +16,7 @@ class PathFollower3DSystem extends System {
   int get priority => SystemPriorities.movingPlatform;
 
   @override
-  List<Type> get requiredComponents => const [TransformComponent, PathFollower3D];
+  List<Type> get requiredComponents => const [TransformComponent, PathFollower3DComponent];
 
   // Each spline's sampled path, while its shape stays the same.
   final Expando<(Object, SplinePath)> _paths = Expando();
@@ -25,7 +25,7 @@ class PathFollower3DSystem extends System {
   final Vector3 _way = Vector3.zero();
 
   /// [spline]'s path, sampled again only when it changed.
-  SplinePath pathOf(Spline3D spline) {
+  SplinePath pathOf(Spline3DComponent spline) {
     final key = spline.shapeKey;
     final known = _paths[spline];
     if (known != null && known.$1 == key) return known.$2;
@@ -38,10 +38,10 @@ class PathFollower3DSystem extends System {
   void update(double deltaTime) {
     for (final entity in entities) {
       if (!entity.isActive) continue;
-      final f = entity.getComponent<PathFollower3D>()!;
+      final f = entity.getComponent<PathFollower3DComponent>()!;
       final owner = f.path.resolve(world, entity);
       if (owner == null || identical(owner, entity)) continue;
-      final spline = owner.getComponent<Spline3D>();
+      final spline = owner.getComponent<Spline3DComponent>();
       if (spline == null) continue;
       final path = pathOf(spline);
       if (path.isEmpty) continue;
@@ -58,7 +58,7 @@ class PathFollower3DSystem extends System {
   }
 
   /// Moves [f] [deltaTime] seconds further along [path].
-  static void advance(PathFollower3D f, SplinePath path, double deltaTime) {
+  static void advance(PathFollower3DComponent f, SplinePath path, double deltaTime) {
     final length = path.length;
     if (f.speed <= 0) return;
     var time = deltaTime;
@@ -106,7 +106,7 @@ class PathFollower3DSystem extends System {
   }
 
   /// Puts [entity] where [f] is along [path], laid out by [owner].
-  void place(Entity entity, PathFollower3D f, Entity owner, SplinePath path) {
+  void place(Entity entity, PathFollower3DComponent f, Entity owner, SplinePath path) {
     final t = entity.getComponent<TransformComponent>()!;
     final at = path.at(f.travelled);
     final ownerTransform = owner.getComponent<TransformComponent>();
@@ -126,7 +126,7 @@ class PathFollower3DSystem extends System {
   }
 }
 
-/// Ties each [SplineSweep3D] and [SplineInstances3D] to the [Spline3D] on
+/// Ties each [SplineSweep3DComponent] and [SplineInstances3DComponent] to the [Spline3DComponent] on
 /// its entity, before physics, so a sweep is solid even where nothing
 /// draws it. Writes only their runtime links.
 class SplineLinkSystem extends System {
@@ -134,15 +134,15 @@ class SplineLinkSystem extends System {
   int get priority => SystemPriorities.movingPlatform + 1;
 
   @override
-  List<Type> get requiredComponents => const [Spline3D];
+  List<Type> get requiredComponents => const [Spline3DComponent];
 
   @override
   void update(double deltaTime) {
     for (final entity in entities) {
-      final spline = entity.getComponent<Spline3D>()!;
-      final sweep = entity.getComponent<SplineSweep3D>();
+      final spline = entity.getComponent<Spline3DComponent>()!;
+      final sweep = entity.getComponent<SplineSweep3DComponent>();
       if (sweep != null && !identical(sweep.spline, spline)) sweep.spline = spline;
-      final instances = entity.getComponent<SplineInstances3D>();
+      final instances = entity.getComponent<SplineInstances3DComponent>();
       if (instances != null && !identical(instances.spline, spline)) instances.spline = spline;
     }
   }

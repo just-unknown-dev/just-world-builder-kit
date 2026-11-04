@@ -10,11 +10,12 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_deflate/just_deflate.dart';
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 import 'package:just_game_engine_editor/just_game_engine_editor.dart';
 import 'package:just_world_builder_kit/editor.dart';
 import 'package:just_world_builder_kit/just_world_builder_kit.dart';
+import 'package:just_graphics_engine/just_graphics_engine.dart' show NullGpuDevice, RenderView, rendererNullShaders;
 
 /// A bumpy terrain of [n] samples a side.
 TerrainData _bumpy(int n) {
@@ -142,7 +143,7 @@ void main() {
     test('a chunk: a vertex a sample, facing up, wound to face up', () {
       final data = TerrainData(9);
       expect(TerrainMesher.chunksPerSide(9, 4), 2);
-      final mesh = TerrainMesher.chunk(data, cx: 0, cz: 0, chunkCells: 4, size: 8, colors: Terrain3D.defaultColors);
+      final mesh = TerrainMesher.chunk(data, cx: 0, cz: 0, chunkCells: 4, size: 8, colors: Terrain3DComponent.defaultColors);
       expect(mesh.vertices.length, 25 * kVertexFloats);
       expect(mesh.triangleCount, 32);
       final v = mesh.vertices;
@@ -153,7 +154,7 @@ void main() {
       }
       expect([v[3], v[4], v[5]], [0, -1, 0]);
       expect([v[0], v[2]], [-4, -4], reason: 'about its middle');
-      final (r, g, b) = GraphicsShapes.linear(Terrain3D.defaultColors.first);
+      final (r, g, b) = LinearColor.of(Terrain3DComponent.defaultColors.first);
       expect([v[12], v[13], v[14]], [closeTo(r, 1e-6), closeTo(g, 1e-6), closeTo(b, 1e-6)]);
     });
 
@@ -171,7 +172,7 @@ void main() {
 
     test('picked through a hole only where no ground is drawn', () {
       // 9 samples a metre apart, from -4: sample (i, j) at x = i - 4.
-      final terrain = Terrain3D(size: 8)..loaded = (TerrainData(9)..setHole(2, 2, true));
+      final terrain = Terrain3DComponent(size: 8)..loaded = (TerrainData(9)..setHole(2, 2, true));
       RayTriangleHit? down(double i, double j) =>
           WorldBuilderRayTest.groundHit(terrain, Vector3(i - 4, -5, j - 4), Vector3(0, 1, 0));
       expect(down(2.8, 2.8), isNotNull, reason: 'the far triangle of its cell has no hole corner');
@@ -182,7 +183,7 @@ void main() {
 
     test('solid as a height field, holes and all; built again once settled', () {
       final data = _bumpy(9)..setHole(1, 1, true);
-      final terrain = Terrain3D(size: 16)..loaded = data;
+      final terrain = Terrain3DComponent(size: 16)..loaded = data;
       final field = terrain.solidParts.single as SolidHeightField;
       expect([field.sampleCount, field.cellSize, field.x, field.z], [9, 2, -8, -8]);
       // Rounded to a float: still a hole.
@@ -198,12 +199,12 @@ void main() {
   group('the runtime', () {
     test('saved and read back; its file loaded through its reader', () async {
       final world = World()..initialize();
-      Graphics3D.registerSchemas(world.context);
+      Graphics3D.registerDefinitions(world.context);
       WorldBuilderKit.install(world.context);
       final definitions = world.context.definitions;
-      final t = Terrain3D(data: 'assets/terrain/a.jterrain', size: 100, material: 'assets/materials/ground.material.json')
-        ..colors = [...Terrain3D.defaultColors]..colors[2] = const Color(0xFF123456);
-      final back = definitions.decode(definitions.encode(t)!)! as Terrain3D;
+      final t = Terrain3DComponent(data: 'assets/terrain/a.jterrain', size: 100, material: 'assets/materials/ground.material.json')
+        ..colors = [...Terrain3DComponent.defaultColors]..colors[2] = const Color(0xFF123456);
+      final back = definitions.decode(definitions.encode(t)!)! as Terrain3DComponent;
       expect([back.data, back.size, back.material, back.colors[2]], [t.data, 100, t.material, const Color(0xFF123456)]);
 
       final files = TerrainFiles.of(world.context)..read = (path) async => _bumpy(17).encode();
@@ -217,12 +218,12 @@ void main() {
 
     test('drawn a chunk at a time, again only where it changed', () async {
       final service = Graphics3D(device: NullGpuDevice(shaders: rendererNullShaders));
-      final engine = Engine(config: EngineConfig(extensions: [WorldBuilderKit.extension], graphics3D: service));
+      final engine = Engine(config: EngineConfig(extensions: [WorldBuilderKit.extension], services: [service]));
       await engine.initialize();
       addTearDown(engine.dispose);
       final data = TerrainData(65);
       TerrainFiles.of(engine.world.context).put('assets/terrain/t.jterrain', data);
-      engine.world.createEntityWithComponents([TransformComponent(), Terrain3D(data: 'assets/terrain/t.jterrain', size: 64)]);
+      engine.world.createEntityWithComponents([TransformComponent(), Terrain3DComponent(data: 'assets/terrain/t.jterrain', size: 64)]);
       final camera = RenderView()..lookAt(Vector3(0, -40, -60), Vector3.zero());
       final view = FrameView()
         ..viewportSize = const Size(64, 64)
@@ -241,8 +242,8 @@ void main() {
       expect(second, hasLength(4));
       expect([for (var k = 0; k < 4; k++) identical(first[k], second[k])].where((same) => same), hasLength(3));
       // Smaller chunks, then bigger: what it keeps is what it draws.
-      final provider = RenderProviders.of(engine.world.context).forType(Terrain3D)! as TerrainRenderProvider;
-      final t = engine.world.query([Terrain3D]).single.getComponent<Terrain3D>()!;
+      final provider = engine.world.context.renderProviders.forType(Terrain3DComponent)! as TerrainRenderProvider;
+      final t = engine.world.query([Terrain3DComponent]).single.getComponent<Terrain3DComponent>()!;
       t.chunkCells = 8;
       renderer.update(view);
       expect(provider.chunksKept(data), 64);
@@ -253,26 +254,26 @@ void main() {
 
     test('terrains on one file and of one size are one solid; any other is its own', () {
       final shared = TerrainData(9);
-      final a = Terrain3D(size: 16)..loaded = shared;
-      final b = Terrain3D(size: 16)..loaded = shared;
-      final c = Terrain3D(size: 16)..loaded = TerrainData(9);
+      final a = Terrain3DComponent(size: 16)..loaded = shared;
+      final b = Terrain3DComponent(size: 16)..loaded = shared;
+      final c = Terrain3DComponent(size: 16)..loaded = TerrainData(9);
       expect(a.solidKey, b.solidKey);
       expect(a.solidKey, isNot(c.solidKey));
       shared.settle();
       expect(a.solidKey, b.solidKey);
-      expect(a.solidKey, isNot((Terrain3D(size: 32)..loaded = shared).solidKey));
+      expect(a.solidKey, isNot((Terrain3DComponent(size: 32)..loaded = shared).solidKey));
     });
 
     test('ready: a level\'s files read before it runs — solid at once — and the last one\'s let go', () async {
       final world = World()..initialize();
-      Graphics3D.registerSchemas(world.context);
+      Graphics3D.registerDefinitions(world.context);
       WorldBuilderKit.install(world.context);
       final files = TerrainFiles.of(world.context)..read = (path) async => _bumpy(17).encode();
       await files.load('assets/terrain/old.jterrain');
       final library = MeshLibrary.starter(world.context.definitions).encode();
       world.context.tiles.readText = (path) async => library;
-      final terrain = Terrain3D(data: 'assets/terrain/new.jterrain', size: 32);
-      final tiles = GridTiles3D(library: 'assets/tiles/blocks.meshlib.json')..setTile(0, -1, 0, 2);
+      final terrain = Terrain3DComponent(data: 'assets/terrain/new.jterrain', size: 32);
+      final tiles = GridTiles3DComponent(library: 'assets/tiles/blocks.meshlib.json')..setTile(0, -1, 0, 2);
       world
         ..createEntityWithComponents([TransformComponent(), terrain])
         ..createEntityWithComponents([TransformComponent(), tiles]);
@@ -300,13 +301,13 @@ void main() {
       root = Directory.systemTemp.createTempSync('terrain_');
       addTearDown(() => root.deleteSync(recursive: true));
       final world = World()..initialize();
-      Graphics3D.registerSchemas(world.context);
+      Graphics3D.registerDefinitions(world.context);
       WorldBuilderKit.install(world.context);
       scope = EditorScope(world: world, modules: [WorldBuilderModule(root: root.path)], builtIns: const [BuiltInEditorModule.new]);
       addTearDown(scope.dispose);
       scope.sceneState.openScene(EditorScene(name: 'level', mode: SceneMode.threeD));
       scope.selectDesigner('world_builder');
-      view = OrbitFlyEditorView.of(Camera(viewportSize: const Size(400, 400)))
+      view = OrbitFlyEditorView.of(OutputCamera(viewportSize: const Size(400, 400)))
         ..viewportSize = const Size(400, 400)
         ..pivot.setValues(0, 0, 0)
         ..distance = 40
@@ -336,14 +337,14 @@ void main() {
 
     test('a new terrain: its file beside the scene, one undo step', () {
       final e = terrain();
-      final t = e.getComponent<Terrain3D>()!;
+      final t = e.getComponent<Terrain3DComponent>()!;
       expect(t.data, 'assets/terrain/level/${e.name}.jterrain');
       expect(TerrainFiles.of(scope.context).unsaved, {t.data});
       expect(scope.history.undoEntries, hasLength(1));
     });
 
     test('a stroke raises the ground; undone exactly, redone', () {
-      final t = terrain().getComponent<Terrain3D>()!;
+      final t = terrain().getComponent<Terrain3DComponent>()!;
       final data = t.loaded ?? TerrainFiles.of(scope.context).get(t.data)!;
       final flat = Float32List.fromList(data.heights);
       final solid = data.solidRevision;
@@ -361,7 +362,7 @@ void main() {
     });
 
     test('Shift lowers; [ and ] size the brush', () {
-      final t = terrain().getComponent<Terrain3D>()!;
+      final t = terrain().getComponent<Terrain3DComponent>()!;
       final data = TerrainFiles.of(scope.context).get(t.data)!;
       modifiers = const ModifierKeys(shift: true);
       press(Vector3(0, 0, 0));
@@ -373,7 +374,7 @@ void main() {
     });
 
     test('its file written as the scene is saved', () async {
-      final t = terrain().getComponent<Terrain3D>()!;
+      final t = terrain().getComponent<Terrain3DComponent>()!;
       press(Vector3(0, 0, 0));
       release(Vector3(0, 0, 0));
       final failed = await scope.modules.notifySceneSaving('level');
@@ -386,32 +387,32 @@ void main() {
 
     test('a shared file made unique: a copy of its own, one undo step', () {
       final first = terrain();
-      final t = first.getComponent<Terrain3D>()!;
-      final twin = scope.world.createEntityWithComponents([TransformComponent(), Terrain3D(data: t.data, size: 32)], name: 'Twin');
+      final t = first.getComponent<Terrain3DComponent>()!;
+      final twin = scope.world.createEntityWithComponents([TransformComponent(), Terrain3DComponent(data: t.data, size: 32)], name: 'Twin');
       scope.sceneState.registerEntity(twin);
       final files = TerrainFiles.of(scope.context);
-      twin.getComponent<Terrain3D>()!.link(files);
+      twin.getComponent<Terrain3DComponent>()!.link(files);
       makeTerrainUnique(scope, twin, sceneName: 'level');
-      final own = twin.getComponent<Terrain3D>()!.data;
+      final own = twin.getComponent<Terrain3DComponent>()!.data;
       expect(own, isNot(t.data));
       expect(identical(files.get(own), files.get(t.data)), isFalse);
       scope.history.undo();
-      expect(twin.getComponent<Terrain3D>()!.data, t.data);
+      expect(twin.getComponent<Terrain3DComponent>()!.data, t.data);
     });
 
     test('a terrain made unique keeps its copy once the disk has been looked at', () async {
       final first = terrain();
-      final t = first.getComponent<Terrain3D>()!;
-      final twin = scope.world.createEntityWithComponents([TransformComponent(), Terrain3D(data: t.data, size: 32)], name: 'Twin');
+      final t = first.getComponent<Terrain3DComponent>()!;
+      final twin = scope.world.createEntityWithComponents([TransformComponent(), Terrain3DComponent(data: t.data, size: 32)], name: 'Twin');
       scope.sceneState.registerEntity(twin);
       final files = TerrainFiles.of(scope.context);
-      twin.getComponent<Terrain3D>()!.link(files);
+      twin.getComponent<Terrain3DComponent>()!.link(files);
       // A file of the first free name on disk already: passed over.
       File('${root.path}/assets/terrain/level/Twin_2.jterrain')
         ..createSync(recursive: true)
         ..writeAsBytesSync(TerrainData(9).encode());
       makeTerrainUnique(scope, twin, sceneName: 'level', root: root.path);
-      final own = twin.getComponent<Terrain3D>()!.data;
+      final own = twin.getComponent<Terrain3DComponent>()!.data;
       expect(own, 'assets/terrain/level/Twin_3.jterrain');
       final copy = files.get(own);
       await Future<void>.delayed(const Duration(milliseconds: 200));

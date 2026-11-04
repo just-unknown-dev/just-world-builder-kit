@@ -1,13 +1,13 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:just_game_engine/graphics_3d.dart' show MeshBuilder;
+import 'package:just_game_engine/just_game_engine_3d.dart' show MeshBuilder;
 import 'package:just_game_engine/just_game_engine.dart';
 
 import 'spline_components.dart';
 import 'spline_path.dart';
 
-/// Sweeps a [SplineSweep3D]'s cross-section along its spline into
+/// Sweeps a [SplineSweep3DComponent]'s cross-section along its spline into
 /// triangles: flat faces for a road, a wall or a rail, a smooth tube for a
 /// pipe, closed at both ends of a spline that does not close on itself.
 /// Texture coordinates run in metres: along the spline times the sweep's
@@ -15,7 +15,7 @@ import 'spline_path.dart';
 abstract final class SplineSweeper {
   /// [sweep]'s mesh along [spline] — the last one made when neither has
   /// changed — or null when the spline has no length.
-  static SweptMesh? meshFor(SplineSweep3D sweep, Spline3D spline) {
+  static SweptMesh? meshFor(SplineSweep3DComponent sweep, Spline3DComponent spline) {
     sweep.spline = spline;
     final key = sweep.sweepKey;
     if (sweep.cached != null && sweep.cachedKey == key) return sweep.cached;
@@ -29,7 +29,7 @@ abstract final class SplineSweeper {
 
   /// [sweep]'s cross-section, round its outline (x to the right of the
   /// spline, y up from it), anticlockwise as seen looking along it.
-  static List<(double, double)> profileOf(SplineSweep3D sweep) {
+  static List<(double, double)> profileOf(SplineSweep3DComponent sweep) {
     final w = math.max(sweep.width, 0.01) / 2;
     final h = math.max(sweep.height, 0.01);
     final List<(double, double)> outline = switch (sweep.profile) {
@@ -56,7 +56,7 @@ abstract final class SplineSweeper {
   }
 
   /// [sweep] along [path].
-  static SweptMesh sweepAlong(SplineSweep3D sweep, SplinePath path) {
+  static SweptMesh sweepAlong(SplineSweep3DComponent sweep, SplinePath path) {
     final outline = profileOf(sweep);
     final smooth = sweep.profile == SweepProfile.pipe;
     final step = math.max(sweep.step, 0.05);

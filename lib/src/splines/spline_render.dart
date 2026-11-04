@@ -1,33 +1,33 @@
 import 'dart:math' as math;
 import 'dart:ui' show Color;
 
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
 import 'spline_components.dart';
 import 'spline_path.dart';
 import 'spline_sweep.dart';
 
-/// Ties [c] to the [Spline3D] now on the entity it was last drawn on
+/// Ties [c] to the [Spline3DComponent] now on the entity it was last drawn on
 /// ([owners]): a spline put in another's place — removed, and the removal
 /// undone — is followed at once, in the editor too, where the link systems
 /// do not run.
 void _relink(Component c, Expando<Entity> owners) {
   final owner = owners[c];
   if (owner == null) return;
-  final current = owner.getComponent<Spline3D>();
+  final current = owner.getComponent<Spline3DComponent>();
   switch (c) {
-    case SplineSweep3D() when !identical(c.spline, current):
+    case SplineSweep3DComponent() when !identical(c.spline, current):
       c.spline = current;
-    case SplineInstances3D() when !identical(c.spline, current):
+    case SplineInstances3DComponent() when !identical(c.spline, current):
       c.spline = current;
     default:
   }
 }
 
-/// Draws a [SplineSweep3D]: its swept mesh, in its material file or its
+/// Draws a [SplineSweep3DComponent]: its swept mesh, in its material file or its
 /// colour, made again when the sweep or its spline changes.
-final class SweepRenderProvider extends RenderProvider<SplineSweep3D> {
+final class SweepRenderProvider extends RenderProvider<SplineSweep3DComponent> {
   SweepRenderProvider();
 
   /// How many plain colours' materials it keeps: the ones drawn last. One
@@ -37,14 +37,14 @@ final class SweepRenderProvider extends RenderProvider<SplineSweep3D> {
   // Least recently used first.
   final Map<int, GpuMaterial> _colours = {};
   ModelUploader? _uploader;
-  MaterialLibrary? _library;
+  Material3DLibrary? _library;
   final Expando<Entity> _owners = Expando();
 
   /// How many plain colours' materials it keeps now.
   int get colourCount => _colours.length;
 
   @override
-  Object? revisionOf(SplineSweep3D sweep) {
+  Object? revisionOf(SplineSweep3DComponent sweep) {
     _relink(sweep, _owners);
     return (
       sweep.sweepKey,
@@ -56,9 +56,9 @@ final class SweepRenderProvider extends RenderProvider<SplineSweep3D> {
   }
 
   @override
-  void build(RenderProviderContext context, Entity entity, SplineSweep3D sweep, RenderProviderOutput out) {
+  void build(RenderProviderContext context, Entity entity, SplineSweep3DComponent sweep, RenderProviderOutput out) {
     _owners[sweep] = entity;
-    final spline = entity.getComponent<Spline3D>();
+    final spline = entity.getComponent<Spline3DComponent>();
     if (spline == null) return;
     final mesh = SplineSweeper.meshFor(sweep, spline);
     if (mesh == null || mesh.triangleCount == 0) return;
@@ -88,21 +88,21 @@ final class SweepRenderProvider extends RenderProvider<SplineSweep3D> {
 
   /// A plain material of [color].
   static MaterialData materialData(Color color) {
-    final (r, g, b) = GraphicsShapes.linear(color);
+    final (r, g, b) = LinearColor.of(color);
     return MaterialData(baseColor: (r, g, b, color.a), metallic: 0, roughness: 0.85);
   }
 }
 
-/// Draws a [SplineInstances3D]: its model once at each place along its
+/// Draws a [SplineInstances3DComponent]: its model once at each place along its
 /// spline, every part of it in one batch.
-final class InstancesRenderProvider extends RenderProvider<SplineInstances3D> {
+final class InstancesRenderProvider extends RenderProvider<SplineInstances3DComponent> {
   InstancesRenderProvider();
 
-  GraphicsModels? _models;
+  Graphics3DModels? _models;
   final Expando<Entity> _owners = Expando();
 
   @override
-  Object? revisionOf(SplineInstances3D c) {
+  Object? revisionOf(SplineInstances3DComponent c) {
     _relink(c, _owners);
     return (
       c.layoutKey,
@@ -114,9 +114,9 @@ final class InstancesRenderProvider extends RenderProvider<SplineInstances3D> {
   }
 
   @override
-  void build(RenderProviderContext context, Entity entity, SplineInstances3D c, RenderProviderOutput out) {
+  void build(RenderProviderContext context, Entity entity, SplineInstances3DComponent c, RenderProviderOutput out) {
     _owners[c] = entity;
-    final spline = entity.getComponent<Spline3D>();
+    final spline = entity.getComponent<Spline3DComponent>();
     _models = context.models;
     c.spline = spline;
     if (spline == null) return;
@@ -125,7 +125,7 @@ final class InstancesRenderProvider extends RenderProvider<SplineInstances3D> {
     final reach = c.maxDistance <= 0 ? double.infinity : c.maxDistance;
     if (c.model.isEmpty) {
       // A metre cube each, standing on the spline.
-      final cube = Cube3D();
+      final cube = Cube3DComponent();
       final mesh = context.shapes.meshFor(cube, Vector3(1, 1, 1));
       if (mesh == null) return;
       final lift = Matrix4.identity()..setFromTrs(Vector3(0, -0.5, 0), Quaternion.identity(), Vector3(1, 1, 1));
@@ -152,7 +152,7 @@ final class InstancesRenderProvider extends RenderProvider<SplineInstances3D> {
   }
 
   /// Where [c]'s copies go along [path], in its entity's space.
-  static List<Matrix4> placements(SplineInstances3D c, SplinePath path) {
+  static List<Matrix4> placements(SplineInstances3DComponent c, SplinePath path) {
     if (path.isEmpty) return const [];
     final spacing = math.max(c.spacing, 0.05);
     final out = <Matrix4>[];

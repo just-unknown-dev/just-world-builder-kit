@@ -5,16 +5,16 @@ import 'package:just_game_engine/just_game_engine.dart';
 import '../scatter/scatter_components.dart';
 import 'scatter_tools.dart' show removeScatterLayer, scatterCollisionLabel, scatterCounts;
 
-/// The inspector's editor for a [Scatter3D]'s layers: a card for each —
+/// The inspector's editor for a [Scatter3DComponent]'s layers: a card for each —
 /// its colour, name and pieces on top, its settings inside — and Add a
 /// layer. Each change is one undo step of the field.
 Widget scatterLayersEditor(FieldEditorContext context) => _ScatterLayersEditor(context: context);
 
-/// The inspector's row for a [Scatter3D]'s pieces: how many of each
+/// The inspector's row for a [Scatter3DComponent]'s pieces: how many of each
 /// layer, and Clear.
 Widget scatterInstancesEditor(FieldEditorContext context) {
   final pieces = [for (final p in (context.value as List?) ?? const []) if (p is ScatterInstance) p];
-  final scatter = context.component is Scatter3D ? context.component as Scatter3D : null;
+  final scatter = context.component is Scatter3DComponent ? context.component as Scatter3DComponent : null;
   final layers = scatter?.layers ?? const <ScatterLayer>[];
   final counts = List<int>.filled(layers.length, 0);
   for (final p in pieces) {
@@ -92,7 +92,7 @@ class _ScatterLayersEditorState extends State<_ScatterLayersEditor> {
     ScrubHint? scrub,
     List<String>? fileExtensions,
   }) {
-    final field = SchemaField(
+    final field = FieldDefinition(
       name: name,
       kind: kind,
       read: (_) => value,
@@ -123,7 +123,7 @@ class _ScatterLayersEditorState extends State<_ScatterLayersEditor> {
   @override
   Widget build(BuildContext context) {
     final layers = _layers;
-    final scatter = _c.component is Scatter3D ? _c.component as Scatter3D : null;
+    final scatter = _c.component is Scatter3DComponent ? _c.component as Scatter3DComponent : null;
     final counts = scatter == null ? List<int>.filled(layers.length, 0) : scatterCounts(scatter);
     const metres = ScrubHint(step: 0.1, fractionDigits: 1, suffix: 'm');
     const times = ScrubHint(step: 0.05, fractionDigits: 2, suffix: '×');

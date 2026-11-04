@@ -32,7 +32,7 @@ enum ScatterShape {
   final String label;
 }
 
-/// One kind of thing a [Scatter3D] scatters — grass, rocks, trees — and how:
+/// One kind of thing a [Scatter3DComponent] scatters — grass, rocks, trees — and how:
 /// at least [spacing] metres apart, sized between [minScale] and
 /// [maxScale], turned at random, leaning with the ground or upright.
 final class ScatterLayer {
@@ -161,9 +161,9 @@ final class ScatterInstance {
 /// Things scattered over the ground — grass, flowers, rocks, trees — of a
 /// few [layers], painted with the Scatter brush: drawn many to a draw and
 /// not at all far off; solid, for layers that say so, through a
-/// `Collider3D` set to match its shape.
-class Scatter3D extends Component implements SolidShapeSource {
-  Scatter3D({List<ScatterLayer>? layers, List<ScatterInstance>? instances, this.cellSize = 32, this.castShadows = true})
+/// `Collider3DComponent` set to match its shape.
+class Scatter3DComponent extends Component implements SolidShapeSource {
+  Scatter3DComponent({List<ScatterLayer>? layers, List<ScatterInstance>? instances, this.cellSize = 32, this.castShadows = true})
     : layers = layers ?? [ScatterLayer(name: 'Grass')],
       instances = instances ?? [];
 
@@ -239,7 +239,7 @@ class Scatter3D extends Component implements SolidShapeSource {
   }
 }
 
-/// A [Scatter3D]'s layers, saved as a list.
+/// A [Scatter3DComponent]'s layers, saved as a list.
 class ScatterLayersFieldType extends FieldType<List<ScatterLayer>> {
   const ScatterLayersFieldType();
 
@@ -255,7 +255,7 @@ class ScatterLayersFieldType extends FieldType<List<ScatterLayer>> {
   Object? decode(Object? json, FieldConstraints constraints) => json is List ? [for (final l in json) ScatterLayer.fromJson(l)] : json;
 }
 
-/// A [Scatter3D]'s pieces, saved as base64 of zlib-packed records: a
+/// A [Scatter3DComponent]'s pieces, saved as base64 of zlib-packed records: a
 /// version byte, then per piece its layer (8 bits), position, turn, size
 /// and lean (32-bit floats).
 class ScatterInstancesFieldType extends FieldType<List<ScatterInstance>> {

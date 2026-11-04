@@ -6,15 +6,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
-import 'package:just_game_engine/physics_3d.dart';
 import 'package:just_game_engine_editor/just_game_engine_editor.dart';
 import 'package:just_world_builder_kit/editor.dart';
 import 'package:just_world_builder_kit/just_world_builder_kit.dart';
 
-Spline3D _spline(List<List<double>> points, {bool closed = false, SplineInterpolation curve = SplineInterpolation.linear}) =>
-    Spline3D(
+Spline3DComponent _spline(List<List<double>> points, {bool closed = false, SplineInterpolation curve = SplineInterpolation.linear}) =>
+    Spline3DComponent(
       points: [for (final p in points) SplinePoint(position: Vector3(p[0], p[1], p[2]))],
       closed: closed,
       interpolation: curve,
@@ -85,9 +84,9 @@ void main() {
 
     test('copies laid along it, every so far', () {
       final path = SplinePath.of(_spline([[0, 0, 0], [10, 0, 0]]));
-      expect(InstancesRenderProvider.placements(SplineInstances3D(spacing: 2), path), hasLength(6));
+      expect(InstancesRenderProvider.placements(SplineInstances3DComponent(spacing: 2), path), hasLength(6));
       final loop = SplinePath.of(_spline([[0, 0, 0], [10, 0, 0], [10, 0, 10], [0, 0, 10]], closed: true));
-      expect(InstancesRenderProvider.placements(SplineInstances3D(spacing: 4), loop), hasLength(10), reason: 'none twice where it meets itself');
+      expect(InstancesRenderProvider.placements(SplineInstances3DComponent(spacing: 4), loop), hasLength(10), reason: 'none twice where it meets itself');
     });
 
     test('a closed loop over hills and dips: its frames meet where it closes', () {
@@ -124,7 +123,7 @@ void main() {
 
   group('a sweep', () {
     test('a road: closed, facing out, its top on the spline', () {
-      final sweep = SplineSweep3D(profile: SweepProfile.road, width: 3, height: 0.3, step: 1);
+      final sweep = SplineSweep3DComponent(profile: SweepProfile.road, width: 3, height: 0.3, step: 1);
       final mesh = SplineSweeper.meshFor(sweep, _spline([[0, 0, 0], [10, 0, 0]]))!;
       // Four sides of ten stretches, two triangles each, and two ends.
       expect(mesh.triangleCount, 4 * 10 * 2 + 2 * 2);
@@ -141,7 +140,7 @@ void main() {
 
     test('made again only when it or its spline changes', () {
       final spline = _spline([[0, 0, 0], [10, 0, 0]]);
-      final sweep = SplineSweep3D(profile: SweepProfile.wall);
+      final sweep = SplineSweep3DComponent(profile: SweepProfile.wall);
       final first = SplineSweeper.meshFor(sweep, spline);
       expect(identical(SplineSweeper.meshFor(sweep, spline), first), isTrue);
       final key = sweep.sweepKey;
@@ -151,7 +150,7 @@ void main() {
     });
 
     test('a pipe: smooth, its normals out from the middle', () {
-      final sweep = SplineSweep3D(profile: SweepProfile.pipe, radius: 0.5, sides: 10, step: 0.5);
+      final sweep = SplineSweep3DComponent(profile: SweepProfile.pipe, radius: 0.5, sides: 10, step: 0.5);
       final mesh = SplineSweeper.meshFor(sweep, _spline([[0, 0, 0], [6, 0, 0], [6, 0, 6]], curve: SplineInterpolation.catmullRom))!;
       expect(_volume(mesh), greaterThan(0));
       final path = SplinePath.of(sweep.spline!);
@@ -168,7 +167,7 @@ void main() {
     });
 
     test('solid once tied to its spline: a mesh to collide with', () {
-      final sweep = SplineSweep3D(profile: SweepProfile.road, step: 1);
+      final sweep = SplineSweep3DComponent(profile: SweepProfile.road, step: 1);
       expect(sweep.solidParts, isEmpty);
       sweep.spline = _spline([[0, 0, 0], [10, 0, 0]]);
       final parts = sweep.solidParts;
@@ -177,7 +176,7 @@ void main() {
     });
 
     test('its solid key changes with its shape, not with how it looks', () {
-      final sweep = SplineSweep3D(profile: SweepProfile.road)..spline = _spline([[0, 0, 0], [10, 0, 0]]);
+      final sweep = SplineSweep3DComponent(profile: SweepProfile.road)..spline = _spline([[0, 0, 0], [10, 0, 0]]);
       final key = sweep.solidKey;
       sweep.tiling = 4;
       expect(sweep.solidKey, key, reason: 'its collider is not made again for its texture');
@@ -191,7 +190,7 @@ void main() {
 
     setUp(() {
       world = World()..initialize();
-      Graphics3D.registerSchemas(world.context);
+      Graphics3D.registerDefinitions(world.context);
       WorldBuilderKit.install(world.context);
     });
 
@@ -202,15 +201,15 @@ void main() {
         ..points[0].mode = SplineTangentMode.free
         ..points[1].roll = 0.5;
       final json = definitions.encode(spline)!;
-      final back = definitions.decode(json)! as Spline3D;
+      final back = definitions.decode(json)! as Spline3DComponent;
       expect(back.shapeKey, spline.shapeKey);
 
-      final follower = PathFollower3D(path: const EntityTarget.name('Route'), speed: 3, mode: FollowMode.loop, faceAlong: true);
-      final again = definitions.decode(definitions.encode(follower)!)! as PathFollower3D;
+      final follower = PathFollower3DComponent(path: const EntityTarget.name('Route'), speed: 3, mode: FollowMode.loop, faceAlong: true);
+      final again = definitions.decode(definitions.encode(follower)!)! as PathFollower3DComponent;
       expect([again.path.value, again.speed, again.mode, again.faceAlong], ['Route', 3, FollowMode.loop, true]);
 
-      final sweep = SplineSweep3D(profile: SweepProfile.pipe, radius: 0.7, material: 'assets/materials/rock.material.json');
-      final copy = definitions.decode(definitions.encode(sweep)!)! as SplineSweep3D;
+      final sweep = SplineSweep3DComponent(profile: SweepProfile.pipe, radius: 0.7, material: 'assets/materials/rock.material.json');
+      final copy = definitions.decode(definitions.encode(sweep)!)! as SplineSweep3DComponent;
       expect([copy.profile, copy.radius, copy.material], [SweepProfile.pipe, 0.7, 'assets/materials/rock.material.json']);
       expect(world.context.fieldTypes.byId(SplinePointsFieldType.typeId), isA<SplinePointsFieldType>());
     });
@@ -222,8 +221,8 @@ void main() {
       ], name: 'Route');
       final platform = world.createEntityWithComponents([
         TransformComponent(),
-        RigidBody3D(bodyType: BodyType3D.kinematic),
-        PathFollower3D(path: const EntityTarget.name('Route'), speed: 2, wait: 0.5, faceAlong: true),
+        RigidBody3DComponent(bodyType: Body3DType.kinematic),
+        PathFollower3DComponent(path: const EntityTarget.name('Route'), speed: 2, wait: 0.5, faceAlong: true),
       ], name: 'Platform');
       WorldBuilderKit.registerSystems(world);
       final at = platform.getComponent<TransformComponent>()!.position;
@@ -244,7 +243,7 @@ void main() {
       expect(at.x, closeTo(10, 1e-6), reason: 'resting');
       world.update(0.75);
       expect(at.x, closeTo(9, 1e-6), reason: 'and back');
-      expect(platform.getComponent<PathFollower3D>()!.speed, 2, reason: 'its saved fields untouched');
+      expect(platform.getComponent<PathFollower3DComponent>()!.speed, 2, reason: 'its saved fields untouched');
     });
 
     test('once: to the end, and stops; a loop round a closed route', () {
@@ -252,8 +251,8 @@ void main() {
         TransformComponent(),
         _spline([[0, 0, 0], [10, 0, 0], [10, 0, 10], [0, 0, 10]], closed: true),
       ], name: 'Ring');
-      final once = PathFollower3D(path: const EntityTarget.name('Ring'), speed: 10, mode: FollowMode.once);
-      final loop = PathFollower3D(path: const EntityTarget.name('Ring'), speed: 10, mode: FollowMode.loop, wait: 9);
+      final once = PathFollower3DComponent(path: const EntityTarget.name('Ring'), speed: 10, mode: FollowMode.once);
+      final loop = PathFollower3DComponent(path: const EntityTarget.name('Ring'), speed: 10, mode: FollowMode.loop, wait: 9);
       world.createEntityWithComponents([TransformComponent(), once]);
       world.createEntityWithComponents([TransformComponent(), loop]);
       world.addSystem(PathFollower3DSystem());
@@ -266,7 +265,7 @@ void main() {
     });
 
     test('a sweep tied to its spline before physics, drawn or not', () {
-      final sweep = SplineSweep3D();
+      final sweep = SplineSweep3DComponent();
       final spline = _spline([[0, 0, 0], [3, 0, 0]]);
       world.createEntityWithComponents([TransformComponent(), spline, sweep]);
       world.addSystem(SplineLinkSystem());
@@ -283,7 +282,7 @@ void main() {
 
     setUp(() {
       final world = World()..initialize();
-      Graphics3D.registerSchemas(world.context);
+      Graphics3D.registerDefinitions(world.context);
       WorldBuilderKit.install(world.context);
       scope = EditorScope(
         world: world,
@@ -293,7 +292,7 @@ void main() {
       addTearDown(scope.dispose);
       scope.sceneState.openScene(EditorScene(name: 'level', mode: SceneMode.threeD));
       scope.selectDesigner('world_builder');
-      view = OrbitFlyEditorView.of(Camera(viewportSize: const Size(400, 400)))
+      view = OrbitFlyEditorView.of(OutputCamera(viewportSize: const Size(400, 400)))
         ..viewportSize = const Size(400, 400)
         ..pivot.setValues(0, 0, 0)
         ..distance = 30
@@ -319,7 +318,7 @@ void main() {
     }
 
     SplineTool tool() => session.tools.byId(SplineTool.toolId)! as SplineTool;
-    Entity withSpline() => scope.world.entities.singleWhere((e) => e.hasComponent<Spline3D>());
+    Entity withSpline() => scope.world.entities.singleWhere((e) => e.hasComponent<Spline3DComponent>());
 
     test('points clicked, Enter: a solid road, one undo step', () {
       session.setTool(SplineTool.toolId);
@@ -332,17 +331,17 @@ void main() {
       click(Vector3(8, 0, 6));
       expect(session.handleKey(LogicalKeyboardKey.enter, gridSize: 32), isTrue);
       final road = withSpline();
-      final spline = road.getComponent<Spline3D>()!;
+      final spline = road.getComponent<Spline3DComponent>()!;
       expect(spline.points, hasLength(3));
       expect(spline.points.first.position.length, closeTo(0, 1e-9), reason: 'standing at its first point');
       final t = road.getComponent<TransformComponent>()!.position;
       expect([t.x, t.y, t.z], [closeTo(2, 1e-6), closeTo(-0.02, 1e-6), closeTo(0, 1e-6)], reason: 'lifted off the ground');
-      expect(road.getComponent<SplineSweep3D>()!.profile, SweepProfile.road);
-      expect(road.getComponent<RigidBody3D>()!.bodyType, BodyType3D.static);
-      expect(road.getComponent<Collider3D>()!.shape, ColliderShape3D.matchShape);
+      expect(road.getComponent<SplineSweep3DComponent>()!.profile, SweepProfile.road);
+      expect(road.getComponent<RigidBody3DComponent>()!.bodyType, Body3DType.static);
+      expect(road.getComponent<Collider3DComponent>()!.shape, Collider3DShape.matchShape);
       expect(scope.history.undoEntries, hasLength(1));
       scope.history.undo();
-      expect(scope.world.entities.where((e) => e.hasComponent<Spline3D>()), isEmpty);
+      expect(scope.world.entities.where((e) => e.hasComponent<Spline3DComponent>()), isEmpty);
     });
 
     test('closed by a click on its first point, that once; a spot clicked twice is one point', () {
@@ -351,7 +350,7 @@ void main() {
         click(p);
       }
       click(Vector3(0, 0, 0));
-      final first = withSpline().getComponent<Spline3D>()!;
+      final first = withSpline().getComponent<Spline3DComponent>()!;
       expect(first.closed, isTrue);
       expect(tool().closed.value, isFalse, reason: 'the option as it was');
 
@@ -361,7 +360,7 @@ void main() {
       click(Vector3(8, 0, 12));
       click(Vector3(8, 0, 18));
       session.handleKey(LogicalKeyboardKey.enter, gridSize: 32);
-      final second = scope.world.entities.where((e) => e.hasComponent<Spline3D>()).last.getComponent<Spline3D>()!;
+      final second = scope.world.entities.where((e) => e.hasComponent<Spline3DComponent>()).last.getComponent<Spline3DComponent>()!;
       expect(identical(second, first), isFalse);
       expect([second.points.length, second.closed], [3, false]);
     });
@@ -373,9 +372,9 @@ void main() {
       click(Vector3(10, 0, 0));
       session.handleKey(LogicalKeyboardKey.enter, gridSize: 32);
       final path = withSpline();
-      final platform = scope.world.entities.singleWhere((e) => e.hasComponent<PathFollower3D>());
-      expect(platform.getComponent<PathFollower3D>()!.path.value, path.name);
-      expect(platform.getComponent<RigidBody3D>()!.bodyType, BodyType3D.kinematic);
+      final platform = scope.world.entities.singleWhere((e) => e.hasComponent<PathFollower3DComponent>());
+      expect(platform.getComponent<PathFollower3DComponent>()!.path.value, path.name);
+      expect(platform.getComponent<RigidBody3DComponent>()!.bodyType, Body3DType.kinematic);
       expect(scope.history.undoEntries, hasLength(1));
     });
 
@@ -385,7 +384,7 @@ void main() {
         _spline([[0, 0, 0], [10, 0, 0], [10, 0, 10]], curve: SplineInterpolation.catmullRom),
       ], name: 'Path_0');
       scope.sceneState.registerEntity(entity);
-      final spline = entity.getComponent<Spline3D>()!;
+      final spline = entity.getComponent<Spline3DComponent>()!;
       List<ViewportHandle> handles() => SplineHandles().handlesOf(entity, scope);
       // Three points, their heights, two "+" between and one past the end.
       expect(handles(), hasLength(3 + 3 + 2 + 1));
@@ -412,7 +411,7 @@ void main() {
         TransformComponent(),
         _spline([[0, 0, 0], [10, 0, 0], [20, 0, 0]], curve: SplineInterpolation.bezier),
       ]);
-      final spline = entity.getComponent<Spline3D>()!;
+      final spline = entity.getComponent<Spline3DComponent>()!;
       final handles = SplineHandles().handlesOf(entity, scope);
       // Middle point: in and out.
       final out = handles.where((h) => h.tooltip!.contains('leaving')).toList()[1];
@@ -441,13 +440,13 @@ void main() {
       ], name: 'Path_0');
       final lamp = scope.world.createEntityWithComponents([
         TransformComponent(position: Vector3(50, 0, 50)),
-        Cube3D(width: 0.2, height: 3, depth: 0.2),
+        Cube3DComponent(width: 0.2, height: 3, depth: 0.2),
       ], name: 'Lamp_0');
       for (final e in [route, lamp]) {
         scope.sceneState.registerEntity(e);
       }
       expect(SplineEdits.layAlong(scope, route, [route, lamp], 5), 3);
-      final lamps = scope.world.entities.where((e) => e.getComponent<Primitive3D>() is Cube3D && e != lamp).toList();
+      final lamps = scope.world.entities.where((e) => e.getComponent<Primitive3DComponent>() is Cube3DComponent && e != lamp).toList();
       expect([for (final l in lamps) l.getComponent<TransformComponent>()!.position.x]..sort(), [
         closeTo(0, 1e-6),
         closeTo(5, 1e-6),
@@ -465,19 +464,19 @@ void main() {
       final fence = scope.world.createEntityWithComponents([
         TransformComponent(),
         _spline([[0, 0, 0], [10, 0, 0]]),
-        SplineInstances3D(spacing: 2),
+        SplineInstances3DComponent(spacing: 2),
       ], name: 'Posts_0');
       scope.sceneState.registerEntity(fence);
       expect(SplineEdits.bake(scope, fence), 6);
-      expect(fence.hasComponent<SplineInstances3D>(), isFalse);
-      final posts = scope.world.entities.where((e) => e.getComponent<Primitive3D>() is Cube3D).toList();
+      expect(fence.hasComponent<SplineInstances3DComponent>(), isFalse);
+      final posts = scope.world.entities.where((e) => e.getComponent<Primitive3DComponent>() is Cube3DComponent).toList();
       expect(posts, hasLength(6));
       // A metre cube standing on the spline: its middle half a metre up.
       expect(posts.first.getComponent<TransformComponent>()!.position.y, closeTo(-0.5, 1e-6));
       expect(posts.every((p) => p.getComponent<ParentComponent>() != null), isTrue, reason: 'in one group');
       scope.history.undo();
-      expect(fence.hasComponent<SplineInstances3D>(), isTrue);
-      expect(scope.world.entities.where((e) => e.getComponent<Primitive3D>() is Cube3D), isEmpty);
+      expect(fence.hasComponent<SplineInstances3DComponent>(), isTrue);
+      expect(scope.world.entities.where((e) => e.getComponent<Primitive3DComponent>() is Cube3DComponent), isEmpty);
     });
   });
 }

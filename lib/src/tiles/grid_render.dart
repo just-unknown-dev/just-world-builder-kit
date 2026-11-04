@@ -1,14 +1,14 @@
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
 import 'grid_orientations.dart';
 import 'grid_tiles.dart';
 import 'mesh_library.dart';
 
-/// Draws a [GridTiles3D]: each item's tiles in batches, one per item for
+/// Draws a [GridTiles3DComponent]: each item's tiles in batches, one per item for
 /// each block of [chunkCells]³ cells, so blocks out of sight are skipped.
 /// Built again when its cells, its library or a model it shows changes.
-final class GridTilesRenderProvider extends RenderProvider<GridTiles3D> {
+final class GridTilesRenderProvider extends RenderProvider<GridTiles3DComponent> {
   GridTilesRenderProvider(this.context);
 
   /// The engine the libraries are loaded for.
@@ -17,12 +17,12 @@ final class GridTilesRenderProvider extends RenderProvider<GridTiles3D> {
   /// How many cells along each side a batch covers.
   static const int chunkCells = 8;
 
-  GraphicsModels? _models;
+  Graphics3DModels? _models;
 
   MeshLibraries get _libraries => MeshLibraries.of(context);
 
   @override
-  Object? revisionOf(GridTiles3D c) => (
+  Object? revisionOf(GridTiles3DComponent c) => (
     c.revision,
     c.library,
     c.castShadows,
@@ -33,7 +33,7 @@ final class GridTilesRenderProvider extends RenderProvider<GridTiles3D> {
 
   /// How many of the models [c]'s library shows are loaded: a count that
   /// changes as they arrive.
-  int _modelsReady(GridTiles3D c) {
+  int _modelsReady(GridTiles3DComponent c) {
     final library = c.loaded, models = _models;
     if (library == null || models == null) return 0;
     var ready = 0;
@@ -44,7 +44,7 @@ final class GridTilesRenderProvider extends RenderProvider<GridTiles3D> {
   }
 
   @override
-  void build(RenderProviderContext ctx, Entity entity, GridTiles3D c, RenderProviderOutput out) {
+  void build(RenderProviderContext ctx, Entity entity, GridTiles3DComponent c, RenderProviderOutput out) {
     _models = ctx.models;
     c.link(_libraries);
     final library = c.loaded;
@@ -85,17 +85,17 @@ final class GridTilesRenderProvider extends RenderProvider<GridTiles3D> {
 
   /// Where each of [c]'s tiles goes, in its entity's space: by item, then
   /// by block of cells.
-  static Map<int, Map<int, List<Matrix4>>> placements(GridTiles3D c, MeshLibrary library) {
+  static Map<int, Map<int, List<Matrix4>>> placements(GridTiles3DComponent c, MeshLibrary library) {
     final size = library.cellSize;
     final out = <int, Map<int, List<Matrix4>>>{};
     // By id, once: not a search of the items for every cell.
     final items = {for (final i in library.items) i.id: i};
     for (final MapEntry(:key, :value) in c.cells.entries) {
-      final tile = GridTiles3D.unpack(value);
+      final tile = GridTiles3DComponent.unpack(value);
       final item = items[tile.item];
       if (item == null) continue;
-      final cell = GridTiles3D.cellOf(key);
-      final block = GridTiles3D.keyOf(
+      final cell = GridTiles3DComponent.cellOf(key);
+      final block = GridTiles3DComponent.keyOf(
         (cell.x / chunkCells).floor(),
         (cell.y / chunkCells).floor(),
         (cell.z / chunkCells).floor(),
@@ -107,7 +107,7 @@ final class GridTilesRenderProvider extends RenderProvider<GridTiles3D> {
 
   /// Where a tile of [item] in [cell], turned [orientation], is drawn.
   static Matrix4 matrixOf(GridCell cell, int orientation, MeshLibraryItem item, double cellSize) {
-    final at = GridTiles3D.centreOf(cell.x, cell.y, cell.z, cellSize) + GridOrientations.apply(orientation, item.offset);
+    final at = GridTiles3DComponent.centreOf(cell.x, cell.y, cell.z, cellSize) + GridOrientations.apply(orientation, item.offset);
     return Matrix4.identity()..setFromTrs(at, GridOrientations.of(orientation), Vector3(item.scale, item.scale, item.scale));
   }
 }

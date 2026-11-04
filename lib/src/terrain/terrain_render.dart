@@ -1,16 +1,16 @@
 import 'dart:math' as math;
 
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
-import 'terrain_component.dart';
+import 'terrain_3d_component.dart';
 import 'terrain_data.dart';
 import 'terrain_mesher.dart';
 
-/// Draws a [Terrain3D] in chunks, each made again only when a sample in it
+/// Draws a [Terrain3DComponent] in chunks, each made again only when a sample in it
 /// changed: with its layered material file when it has one (the layers'
 /// weights in the vertex colour), else in its layers' colours mixed.
-final class TerrainRenderProvider extends RenderProvider<Terrain3D> {
+final class TerrainRenderProvider extends RenderProvider<Terrain3DComponent> {
   TerrainRenderProvider(this.context);
 
   /// The engine the files are loaded for.
@@ -18,7 +18,7 @@ final class TerrainRenderProvider extends RenderProvider<Terrain3D> {
 
   TerrainFiles get _files => TerrainFiles.of(context);
 
-  MaterialLibrary? _library;
+  Material3DLibrary? _library;
   ModelUploader? _uploader;
   GpuMaterial? _plain;
 
@@ -27,7 +27,7 @@ final class TerrainRenderProvider extends RenderProvider<Terrain3D> {
   final Expando<Map<(int, int), (Object, GpuPrimitive?)>> _chunks = Expando();
 
   @override
-  Object? revisionOf(Terrain3D t) => (
+  Object? revisionOf(Terrain3DComponent t) => (
     identityHashCode(t.loaded),
     t.loaded?.revision,
     t.size,
@@ -40,7 +40,7 @@ final class TerrainRenderProvider extends RenderProvider<Terrain3D> {
   );
 
   @override
-  void build(RenderProviderContext ctx, Entity entity, Terrain3D t, RenderProviderOutput out) {
+  void build(RenderProviderContext ctx, Entity entity, Terrain3DComponent t, RenderProviderOutput out) {
     t.link(_files);
     final data = t.loaded;
     if (data == null) return;

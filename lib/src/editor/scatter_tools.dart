@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:just_editor_core/just_editor_core.dart';
 import 'package:just_game_engine/just_game_engine.dart';
-import 'package:just_game_engine/physics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_signals/just_signals.dart';
 
 import '../scatter/scatter_brush.dart';
@@ -15,7 +15,7 @@ import 'spline_tools.dart' show adoptEntities;
 /// The tool strip's group for scatter.
 const String scatterGroup = 'worldBuilder.scatter';
 
-/// A stroke of the Scatter brush: the pieces of the [Scatter3D] on
+/// A stroke of the Scatter brush: the pieces of the [Scatter3DComponent] on
 /// [entity] as they were and as they became — found again as the editor
 /// finds an entity rebuilt (`EditorSceneState.liveEntity`), whatever it
 /// is named.
@@ -39,7 +39,7 @@ class ScatterStrokeCommand extends EditorCommand {
   final List<ScatterInstance> before, after;
 
   void _apply(List<ScatterInstance> instances) {
-    sceneState.liveEntity(entity)?.getComponent<Scatter3D>()
+    sceneState.liveEntity(entity)?.getComponent<Scatter3DComponent>()
       ?..instances = List.of(instances)
       ..revision += 1;
     sceneState
@@ -148,15 +148,15 @@ class ScatterTool extends LevelToolHandler {
   /// The scatter it paints: the selected one, else the scene's first.
   Entity? get target {
     final selected = designer.sceneState.selectedEntity.value;
-    if (selected != null && selected.hasComponent<Scatter3D>()) return selected;
-    return designer.world.query([Scatter3D]).firstOrNull;
+    if (selected != null && selected.hasComponent<Scatter3DComponent>()) return selected;
+    return designer.world.query([Scatter3DComponent]).firstOrNull;
   }
 
   /// What a piece can be set down on: anything with a size.
   Iterable<Entity> _grounds() {
     final definitions = designer.world.context.definitions;
     return designer.world.query([TransformComponent]).where(
-      (e) => e.isActive && !e.hasComponent<Scatter3D>() && e.components.any((c) => definitions.definitionFor(c)?.extent != null),
+      (e) => e.isActive && !e.hasComponent<Scatter3DComponent>() && e.components.any((c) => definitions.definitionFor(c)?.extent != null),
     );
   }
 
@@ -176,15 +176,15 @@ class ScatterTool extends LevelToolHandler {
     return (toWorld, toLocal);
   }
 
-  Scatter3D _scatterFor() {
+  Scatter3DComponent _scatterFor() {
     final existing = _entity ?? target;
     if (existing != null) {
       _entity = existing;
-      return existing.getComponent<Scatter3D>()!;
+      return existing.getComponent<Scatter3DComponent>()!;
     }
-    final scatter = Scatter3D(layers: starterScatterLayers());
+    final scatter = Scatter3DComponent(layers: starterScatterLayers());
     _entity = designer.world.createEntityWithComponents(
-      [TransformComponent(), scatter, RigidBody3D(bodyType: BodyType3D.static), Collider3D(shape: ColliderShape3D.matchShape)],
+      [TransformComponent(), scatter, RigidBody3DComponent(bodyType: Body3DType.static), Collider3DComponent(shape: Collider3DShape.matchShape)],
       name: designer.uniqueName('Scatter'),
     );
     _made = true;
@@ -251,7 +251,7 @@ class ScatterTool extends LevelToolHandler {
     _entity = null;
     _made = false;
     final existing = target;
-    _before = List.of(existing?.getComponent<Scatter3D>()?.instances ?? const []);
+    _before = List.of(existing?.getComponent<Scatter3DComponent>()?.instances ?? const []);
     _spacing = null;
     final at = space.surface(ignore: {?existing}).position;
     _last = at;
@@ -282,7 +282,7 @@ class ScatterTool extends LevelToolHandler {
     _before = null;
     _spacing = null;
     if (entity == null || before == null) return;
-    final scatter = entity.getComponent<Scatter3D>()!;
+    final scatter = entity.getComponent<Scatter3DComponent>()!;
     final verb = erase.value || context.isShiftDown ? 'Erase' : 'Scatter';
     if (_made) {
       adoptEntities(designer, [entity], '$verb ${scatter.layers.isEmpty ? '' : scatter.layers[layer.value.clamp(0, scatter.layers.length - 1)].name.toLowerCase()}');
@@ -334,7 +334,7 @@ class ScatterTool extends LevelToolHandler {
       if (_made) {
         designer.world.destroyEntity(entity);
       } else if (before != null) {
-        entity.getComponent<Scatter3D>()!
+        entity.getComponent<Scatter3DComponent>()!
           ..instances = before
           ..revision += 1;
       }
@@ -354,7 +354,7 @@ class ScatterTool extends LevelToolHandler {
   @override
   Widget? buildOptions(BuildContext context, ToolOptionsContext options) {
     final muted = TextStyle(color: EditorTheme.textSecondary, fontSize: 11);
-    final layers = target?.getComponent<Scatter3D>()?.layers ?? starterScatterLayers();
+    final layers = target?.getComponent<Scatter3DComponent>()?.layers ?? starterScatterLayers();
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -473,7 +473,7 @@ String scatterCollisionLabel(ScatterCollision c) => switch (c) {
 
 /// Takes layer [index] out of [scatter], and its pieces with it — the
 /// pieces of the layers after it now count one less — as one undo step.
-void removeScatterLayer(EditorScope scope, Scatter3D scatter, int index) {
+void removeScatterLayer(EditorScope scope, Scatter3DComponent scatter, int index) {
   if (index < 0 || index >= scatter.layers.length) return;
   final name = scatter.layers[index].name;
   final edit = ComponentEdit.begin(scope, scatter);
@@ -491,7 +491,7 @@ void removeScatterLayer(EditorScope scope, Scatter3D scatter, int index) {
 }
 
 /// How many pieces each of [scatter]'s layers has.
-List<int> scatterCounts(Scatter3D scatter) {
+List<int> scatterCounts(Scatter3DComponent scatter) {
   final counts = List<int>.filled(scatter.layers.length, 0);
   for (final p in scatter.instances) {
     if (p.layer >= 0 && p.layer < counts.length) counts[p.layer]++;
@@ -527,13 +527,13 @@ class _ScatterPanelState extends State<_ScatterPanel> {
   }
 
   /// Changes [scatter]'s layers as one undo step called [label].
-  void _edit(Scatter3D scatter, String label, void Function(List<ScatterLayer> layers) change) {
+  void _edit(Scatter3DComponent scatter, String label, void Function(List<ScatterLayer> layers) change) {
     final edit = ComponentEdit.begin(widget.session.scope, scatter);
     _apply(scatter, change);
     edit.commit(label);
   }
 
-  void _apply(Scatter3D scatter, void Function(List<ScatterLayer> layers) change) {
+  void _apply(Scatter3DComponent scatter, void Function(List<ScatterLayer> layers) change) {
     final layers = [for (final l in scatter.layers) l.copy()];
     change(layers);
     scatter
@@ -542,7 +542,7 @@ class _ScatterPanelState extends State<_ScatterPanel> {
   }
 
   /// A slider's change: shown at once, one undo step when let go.
-  void _slide(Scatter3D scatter, String label, void Function(List<ScatterLayer> layers) change, {required bool end}) {
+  void _slide(Scatter3DComponent scatter, String label, void Function(List<ScatterLayer> layers) change, {required bool end}) {
     _drag ??= ComponentEdit.begin(widget.session.scope, scatter);
     _apply(scatter, change);
     if (end) {
@@ -563,7 +563,7 @@ class _ScatterPanelState extends State<_ScatterPanel> {
       signal3: tool.layer,
       builder: (context, _, _, chosen, _) {
         final entity = tool.target;
-        final scatter = entity?.getComponent<Scatter3D>();
+        final scatter = entity?.getComponent<Scatter3DComponent>();
         final layers = scatter?.layers ?? starterScatterLayers();
         final counts = scatter == null ? List<int>.filled(layers.length, 0) : scatterCounts(scatter);
         final index = layers.isEmpty ? 0 : chosen.clamp(0, layers.length - 1);
@@ -648,7 +648,7 @@ class _ScatterPanelState extends State<_ScatterPanel> {
     );
   }
 
-  List<Widget> _layerSettings(Scatter3D scatter, int i, ScatterLayer l) {
+  List<Widget> _layerSettings(Scatter3DComponent scatter, int i, ScatterLayer l) {
     String label(String what) => 'Change ${l.name}: $what';
     return [
       PanelCaption('${l.name} settings'),

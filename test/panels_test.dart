@@ -6,7 +6,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 import 'package:just_game_engine_editor/just_game_engine_editor.dart';
 import 'package:just_world_builder_kit/editor.dart';
@@ -21,14 +21,14 @@ void main() {
 
   setUp(() {
     final world = World()..initialize();
-    Graphics3D.registerSchemas(world.context);
+    Graphics3D.registerDefinitions(world.context);
     WorldBuilderKit.install(world.context);
     module = WorldBuilderModule();
     scope = EditorScope(world: world, modules: [module], builtIns: const [BuiltInEditorModule.new]);
     addTearDown(scope.dispose);
     scope.sceneState.openScene(EditorScene(name: 'level', mode: SceneMode.threeD));
     scope.selectDesigner('world_builder');
-    final view = OrbitFlyEditorView.of(Camera(viewportSize: const Size(400, 400)))..viewportSize = const Size(400, 400);
+    final view = OrbitFlyEditorView.of(OutputCamera(viewportSize: const Size(400, 400)))..viewportSize = const Size(400, 400);
     session = LevelDesignerSession(
       scope: scope,
       onDuplicate: () {},
@@ -82,7 +82,7 @@ void main() {
     final terrain = makeTerrain(terrainTool.designer, sceneName: 'level', size: 32, resolution: 33);
     scope.world.createEntityWithComponents([
       TransformComponent(),
-      Scatter3D(layers: starterScatterLayers(), instances: [ScatterInstance(layer: 2, position: Vector3.zero())]),
+      Scatter3DComponent(layers: starterScatterLayers(), instances: [ScatterInstance(layer: 2, position: Vector3.zero())]),
     ], name: 'Scatter_0');
     scope.sceneState.selectEntity(terrain);
     await pumpSections(tester);
@@ -101,7 +101,7 @@ void main() {
     }
     await tester.tap(find.text('Cube'));
     await tester.pumpAndSettle();
-    final scatter = scope.world.query([Scatter3D]).single.getComponent<Scatter3D>()!;
+    final scatter = scope.world.query([Scatter3DComponent]).single.getComponent<Scatter3DComponent>()!;
     expect([scatter.layers[0].shape, scatter.layers[0].model], [ScatterShape.cube, '']);
     expect(scope.history.undoEntries.last.label, 'Change Grass: look');
 
@@ -113,8 +113,8 @@ void main() {
     expect(scope.history.undoEntries.last.label, 'Add a scatter layer');
   });
 
-  FieldEditorContext fieldOf(Scatter3D scatter, String name, List<Object?> written) {
-    final schema = scope.definitions.definitionFor(scatter)! as ComponentSchema;
+  FieldEditorContext fieldOf(Scatter3DComponent scatter, String name, List<Object?> written) {
+    final schema = scope.definitions.definitionFor(scatter)!;
     final field = schema.fields.firstWhere((f) => f.name == name);
     return FieldEditorContext(
       field: field,
@@ -130,7 +130,7 @@ void main() {
   }
 
   testWidgets('the inspector: layers in cards, pieces counted', (tester) async {
-    final scatter = Scatter3D(
+    final scatter = Scatter3DComponent(
       layers: starterScatterLayers(),
       instances: [
         for (var k = 0; k < 5; k++) ScatterInstance(layer: k % 2, position: Vector3(k * 2.0, 0, 0)),
@@ -173,7 +173,7 @@ void main() {
 
   test('a stroke over a terrain scatters on its ground', () {
     final terrainTool = session.tools.byId(TerrainSculptTool.toolId)! as TerrainSculptTool;
-    final terrain = makeTerrain(terrainTool.designer, sceneName: 'level', size: 32, resolution: 33).getComponent<Terrain3D>()!;
+    final terrain = makeTerrain(terrainTool.designer, sceneName: 'level', size: 32, resolution: 33).getComponent<Terrain3DComponent>()!;
     final data = TerrainFiles.of(scope.context).get(terrain.data)!;
     for (var j = 0; j < 33; j++) {
       for (var i = 0; i < 33; i++) {
@@ -192,7 +192,7 @@ void main() {
     final at = view.projectToScreen(Vector3(0, -2, 0))!;
     session.onPointerDown(Offset.zero, 32, screen: at, canvasSize: const Size(400, 400));
     session.onPointerUp(Offset.zero, 32, screen: at, canvasSize: const Size(400, 400));
-    final scatter = scope.world.query([Scatter3D]).single.getComponent<Scatter3D>()!;
+    final scatter = scope.world.query([Scatter3DComponent]).single.getComponent<Scatter3DComponent>()!;
     expect(scatter.instances, isNotEmpty, reason: 'each piece dropped straight down onto the terrain');
     for (final p in scatter.instances) {
       final h = data.heightAt((p.position.x - terrain.origin) / terrain.cellSize, (p.position.z - terrain.origin) / terrain.cellSize);

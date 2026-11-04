@@ -5,8 +5,8 @@ import 'package:just_editor_core/just_editor_core.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
 import '../scatter/scatter_components.dart';
-import '../splines/spline_schemas.dart';
-import '../terrain/terrain_component.dart';
+import '../splines/spline_definitions.dart';
+import '../terrain/terrain_3d_component.dart';
 import '../tiles/grid_tiles.dart';
 import '../tiles/mesh_library.dart';
 import 'blockout_tools.dart';
@@ -66,7 +66,7 @@ class WorldBuilderModule extends EditorModule {
     final scope = _scope;
     if (scope == null) return;
     final terrainFiles = TerrainFiles.of(scope.context);
-    final used = {for (final e in scope.world.query([Terrain3D])) e.getComponent<Terrain3D>()!.data};
+    final used = {for (final e in scope.world.query([Terrain3DComponent])) e.getComponent<Terrain3DComponent>()!.data};
     for (final path in terrainFiles.unsaved.where(used.contains).toList()) {
       final data = terrainFiles.get(path);
       if (data == null) continue;
@@ -88,9 +88,9 @@ class WorldBuilderModule extends EditorModule {
     for (final path in terrainFiles.unsaved.toList()) {
       terrainFiles.forget(path);
     }
-    terrainFiles.releaseUnused([for (final e in scope.world.query([Terrain3D])) e.getComponent<Terrain3D>()!.data]);
+    terrainFiles.releaseUnused([for (final e in scope.world.query([Terrain3DComponent])) e.getComponent<Terrain3DComponent>()!.data]);
     MeshLibraries.of(scope.context).releaseUnused([
-      for (final e in scope.world.query([GridTiles3D])) e.getComponent<GridTiles3D>()!.library,
+      for (final e in scope.world.query([GridTiles3DComponent])) e.getComponent<GridTiles3DComponent>()!.library,
     ]);
   }
 

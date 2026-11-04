@@ -4,21 +4,21 @@ import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/painting.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
-import 'terrain_component.dart';
+import 'terrain_3d_component.dart';
 
-/// How [Terrain3D] is saved, loaded and shown, in the group "World
+/// How [Terrain3DComponent] is saved, loaded and shown, in the group "World
 /// Builder".
-abstract final class TerrainSchemas {
+abstract final class TerrainDefinitions {
   /// Every one.
-  static List<ComponentSchema> get all => [terrain];
+  static List<ComponentDefinition> get all => [terrain];
 
-  static bool _ownColours(Component c) => (c as Terrain3D).material.isEmpty;
+  static bool _ownColours(Component c) => (c as Terrain3DComponent).material.isEmpty;
 
-  /// [Terrain3D].
-  static ComponentSchema<Terrain3D> get terrain => ComponentSchema<Terrain3D>(
-    type: 'Terrain3D',
+  /// [Terrain3DComponent].
+  static ComponentDefinition<Terrain3DComponent> get terrain => ComponentDefinition<Terrain3DComponent>(
+    type: 'Terrain3DComponent',
     id: 'terrain_3d_3c8e51a6',
-    create: Terrain3D.new,
+    create: Terrain3DComponent.new,
     extent: const _TerrainExtent(),
     hints: const ComponentHints(
       dimensions: Dimensions.threeD,
@@ -49,51 +49,51 @@ abstract final class TerrainSchemas {
       },
     ),
     fields: [
-      SchemaField(
+      FieldDefinition(
         name: 'data',
         kind: FieldTypes.assetRef,
-        read: (c) => (c as Terrain3D).data,
-        write: (c, v) => (c as Terrain3D).data = v as String? ?? '',
+        read: (c) => (c as Terrain3DComponent).data,
+        write: (c, v) => (c as Terrain3DComponent).data = v as String? ?? '',
       ),
-      SchemaField(
+      FieldDefinition(
         name: 'size',
         kind: FieldTypes.decimal,
-        read: (c) => (c as Terrain3D).size,
-        write: (c, v) => (c as Terrain3D).size = math.max(1, (v as num).toDouble()),
+        read: (c) => (c as Terrain3DComponent).size,
+        write: (c, v) => (c as Terrain3DComponent).size = math.max(1, (v as num).toDouble()),
       ),
-      SchemaField(
+      FieldDefinition(
         name: 'resolution',
         kind: FieldTypes.integer,
-        read: (c) => (c as Terrain3D).resolution,
-        write: (c, v) => (c as Terrain3D).resolution = (v as num).toInt().clamp(2, 4097),
+        read: (c) => (c as Terrain3DComponent).resolution,
+        write: (c, v) => (c as Terrain3DComponent).resolution = (v as num).toInt().clamp(2, 4097),
       ),
-      SchemaField(
+      FieldDefinition(
         name: 'material',
         kind: FieldTypes.assetRef,
-        read: (c) => (c as Terrain3D).material,
-        write: (c, v) => (c as Terrain3D).material = v as String? ?? '',
+        read: (c) => (c as Terrain3DComponent).material,
+        write: (c, v) => (c as Terrain3DComponent).material = v as String? ?? '',
       ),
       for (var l = 0; l < 4; l++)
-        SchemaField(
+        FieldDefinition(
           name: 'layer${l + 1}',
           kind: FieldTypes.color,
-          read: (c) => (c as Terrain3D).colors[l],
+          read: (c) => (c as Terrain3DComponent).colors[l],
           write: (c, v) {
-            final t = c as Terrain3D;
+            final t = c as Terrain3DComponent;
             t.colors = [...t.colors]..[l] = v as Color;
           },
         ),
-      SchemaField(
+      FieldDefinition(
         name: 'chunkCells',
         kind: FieldTypes.integer,
-        read: (c) => (c as Terrain3D).chunkCells,
-        write: (c, v) => (c as Terrain3D).chunkCells = (v as num).toInt().clamp(8, 128),
+        read: (c) => (c as Terrain3DComponent).chunkCells,
+        write: (c, v) => (c as Terrain3DComponent).chunkCells = (v as num).toInt().clamp(8, 128),
       ),
-      SchemaField(
+      FieldDefinition(
         name: 'castShadows',
         kind: FieldTypes.boolean,
-        read: (c) => (c as Terrain3D).castShadows,
-        write: (c, v) => (c as Terrain3D).castShadows = v as bool,
+        read: (c) => (c as Terrain3DComponent).castShadows,
+        write: (c, v) => (c as Terrain3DComponent).castShadows = v as bool,
       ),
     ],
   );
@@ -105,13 +105,13 @@ final class _TerrainExtent extends ComponentExtent {
 
   @override
   Size? sizeOf(Component component) {
-    final t = component as Terrain3D;
+    final t = component as Terrain3DComponent;
     return Size(t.size, t.size);
   }
 
   @override
   bool boundsInto(Component component, Aabb3 out) {
-    final t = component as Terrain3D;
+    final t = component as Terrain3DComponent;
     final half = t.size / 2;
     final (low, high) = t.loaded?.heightRange ?? (0.0, 0.0);
     // +Y is down: the highest ground is the most negative y.
@@ -121,20 +121,20 @@ final class _TerrainExtent extends ComponentExtent {
 
 }
 
-/// Ties each [Terrain3D] to its file, before physics, so it is solid even
+/// Ties each [Terrain3DComponent] to its file, before physics, so it is solid even
 /// where nothing draws it. Writes only its runtime link.
 class TerrainLinkSystem extends System {
   @override
   int get priority => SystemPriorities.movingPlatform + 1;
 
   @override
-  List<Type> get requiredComponents => const [Terrain3D];
+  List<Type> get requiredComponents => const [Terrain3DComponent];
 
   @override
   void update(double deltaTime) {
     final files = TerrainFiles.of(world.context);
     for (final entity in entities) {
-      entity.getComponent<Terrain3D>()!.link(files);
+      entity.getComponent<Terrain3DComponent>()!.link(files);
     }
   }
 }

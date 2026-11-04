@@ -6,7 +6,7 @@ import 'package:just_game_engine/just_game_engine.dart';
 import '../splines/spline_components.dart';
 import '../splines/spline_path.dart';
 
-/// A selected [Spline3D]'s points to drag along the ground (Ctrl, Cmd on
+/// A selected [Spline3DComponent]'s points to drag along the ground (Ctrl, Cmd on
 /// macOS, snaps to the grid), each with a diamond a metre above it to raise or lower it.
 /// Between each two a "+": click it for a point there, or drag it to place
 /// one; past an open spline's last point one more, to go on. Alt-click a
@@ -25,7 +25,7 @@ final class SplineHandles extends ViewportHandles {
 
   @override
   List<ViewportHandle> handlesOf(Entity entity, EditorScope scope) {
-    final spline = entity.getComponent<Spline3D>();
+    final spline = entity.getComponent<Spline3DComponent>();
     final transform = entity.getComponent<TransformComponent>();
     if (spline == null || transform == null) return const [];
     final world = Matrix4.identity();
@@ -122,7 +122,7 @@ final class SplineHandles extends ViewportHandles {
 
   /// A "+" at [local] that becomes point [index] when clicked or dragged.
   static ViewportHandle _insert(
-    Spline3D spline,
+    Spline3DComponent spline,
     int index,
     Vector3 local,
     Vector3 Function(Vector3 local) toWorld,
@@ -153,7 +153,7 @@ final class SplineHandles extends ViewportHandles {
 
   /// Point [i]'s two Bézier handles.
   static List<ViewportHandle> _tangents(
-    Spline3D spline,
+    Spline3DComponent spline,
     int i,
     Vector3 Function(Vector3 local) toWorld,
     Vector3? Function(HandleDrag drag) onGround,
@@ -234,9 +234,9 @@ final class SplinesOverlay extends ViewportOverlay {
     final dot = Paint()..color = const Color(0xFF4DD0E1);
     final world = Matrix4.identity();
     final at = Vector3.zero();
-    for (final entity in context.world.query([Spline3D, TransformComponent])) {
+    for (final entity in context.world.query([Spline3DComponent, TransformComponent])) {
       if (!context.isShown(entity)) continue;
-      final spline = entity.getComponent<Spline3D>()!;
+      final spline = entity.getComponent<Spline3DComponent>()!;
       final key = spline.shapeKey;
       final known = _samples[spline];
       final samples = known != null && known.$1 == key

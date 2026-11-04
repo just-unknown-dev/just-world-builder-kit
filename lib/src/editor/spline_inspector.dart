@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:just_editor_core/just_editor_core.dart';
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 import 'package:just_signals/just_signals.dart';
 
@@ -9,18 +9,18 @@ import '../splines/spline_path.dart';
 import '../splines/spline_render.dart';
 import 'spline_tools.dart' show rotationOfBasis;
 
-/// The inspector's row for a [Spline3D]'s points: how many and how long,
+/// The inspector's row for a [Spline3DComponent]'s points: how many and how long,
 /// with Reverse and Flatten. The points themselves are dragged in the
 /// viewport.
 Widget splinePointsEditor(FieldEditorContext context) {
   final points = [for (final p in (context.value as List?) ?? const []) if (p is SplinePoint) p];
   final component = context.component;
-  final closed = component is Spline3D && component.closed;
+  final closed = component is Spline3DComponent && component.closed;
   final length = SplinePath.of(
-    Spline3D(
+    Spline3DComponent(
       points: points,
       closed: closed,
-      interpolation: component is Spline3D ? component.interpolation : SplineInterpolation.catmullRom,
+      interpolation: component is Spline3DComponent ? component.interpolation : SplineInterpolation.catmullRom,
     ),
   ).length;
   return Column(
@@ -87,10 +87,10 @@ abstract final class SplineEdits {
     double side = 0,
     bool align = true,
   }) {
-    final spline = entity.getComponent<Spline3D>();
+    final spline = entity.getComponent<Spline3DComponent>();
     final transform = entity.getComponent<TransformComponent>();
     if (spline == null || transform == null) return const [];
-    final instances = SplineInstances3D(spacing: spacing, startAt: startAt, sideOffset: side, alignToPath: align);
+    final instances = SplineInstances3DComponent(spacing: spacing, startAt: startAt, sideOffset: side, alignToPath: align);
     final path = SplinePath.of(spline);
     final world = Matrix4.identity();
     transform.localToWorldInto(world);
@@ -159,11 +159,11 @@ abstract final class SplineEdits {
     return places.length * outermost.length;
   }
 
-  /// [entity]'s [SplineInstances3D] made into entities of their own —
+  /// [entity]'s [SplineInstances3DComponent] made into entities of their own —
   /// each a model (or a cube) under one new group — the component taken
   /// off, as one undo step. Returns how many were made.
   static int bake(EditorScope scope, Entity entity) {
-    final instances = entity.getComponent<SplineInstances3D>();
+    final instances = entity.getComponent<SplineInstances3DComponent>();
     if (instances == null) return 0;
     final places = placesAlong(
       entity,
@@ -204,7 +204,7 @@ abstract final class SplineEdits {
           componentsJson: codec.encodeAll([
             transform,
             if (instances.model.isEmpty)
-              Cube3D(width: 1, height: 1, depth: 1, castShadows: instances.castShadows)
+              Cube3DComponent(width: 1, height: 1, depth: 1, castShadows: instances.castShadows)
             else
               ModelComponent(model: instances.model, castShadows: instances.castShadows),
           ]),
@@ -291,12 +291,12 @@ abstract final class SplineEdits {
   }
 }
 
-/// The inspector's Spline section, under a [Spline3D]'s components: lay
+/// The inspector's Spline section, under a [Spline3DComponent]'s components: lay
 /// the rest of the selection along it, and bake its copies into entities.
 InspectorSection splineSection() => InspectorSection(
   id: 'worldBuilder.spline',
   order: 60,
-  appliesTo: (entity) => entity.hasComponent<Spline3D>(),
+  appliesTo: (entity) => entity.hasComponent<Spline3DComponent>(),
   build: (context, entity, scope) => _SplineSection(entity: entity, scope: scope),
 );
 
@@ -324,7 +324,7 @@ class _SplineSectionState extends State<_SplineSection> {
           for (final id in ids)
             if (id != widget.entity.id) ?scope.world.getEntity(id),
         ];
-        final baked = widget.entity.hasComponent<SplineInstances3D>();
+        final baked = widget.entity.hasComponent<SplineInstances3DComponent>();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

@@ -6,12 +6,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
-import 'package:just_game_engine/physics_3d.dart';
 import 'package:just_game_engine_editor/just_game_engine_editor.dart';
 import 'package:just_world_builder_kit/editor.dart';
 import 'package:just_world_builder_kit/just_world_builder_kit.dart';
+import 'package:just_graphics_engine/just_graphics_engine.dart' show NullGpuDevice, RenderView, rendererNullShaders;
 
 ScatterInstance _piece(double x, double z, {int layer = 0, double scale = 1}) =>
     ScatterInstance(layer: layer, position: Vector3(x, 0, z), scale: scale);
@@ -58,7 +58,7 @@ void main() {
     });
 
     test('solid only where their layer says, standing on their spot', () {
-      final scatter = Scatter3D(
+      final scatter = Scatter3DComponent(
         layers: [
           ScatterLayer(name: 'Grass'),
           ScatterLayer(name: 'Trees', collision: ScatterCollision.capsule, colliderRadius: 0.2, colliderHeight: 2),
@@ -71,7 +71,7 @@ void main() {
     });
 
     test('a box piece turned or leant is solid as it is drawn; a new layer is as solid as its cone', () {
-      final scatter = Scatter3D(
+      final scatter = Scatter3DComponent(
         layers: [ScatterLayer(name: 'Rocks', collision: ScatterCollision.box, colliderRadius: 1, colliderHeight: 2)],
         instances: [ScatterInstance(layer: 0, position: Vector3(10, 0, 0), yaw: math.pi / 4)],
       );
@@ -84,7 +84,7 @@ void main() {
       // An eighth of a turn: its corners reach out a metre's diagonal.
       expect(far, closeTo(math.sqrt2, 1e-5));
       expect(top, closeTo(-2, 1e-5), reason: 'standing on its spot, 2 m tall');
-      final upright = Scatter3D(
+      final upright = Scatter3DComponent(
         layers: [ScatterLayer(collision: ScatterCollision.box)],
         instances: [_piece(0, 0)],
       );
@@ -96,17 +96,17 @@ void main() {
 
     test('two scatters read from a scene are each solid as itself', () {
       final world = World()..initialize();
-      Graphics3D.registerSchemas(world.context);
+      Graphics3D.registerDefinitions(world.context);
       WorldBuilderKit.install(world.context);
       final definitions = world.context.definitions;
-      Scatter3D read(Scatter3D s) => definitions.decode(definitions.encode(s)!)! as Scatter3D;
+      Scatter3DComponent read(Scatter3DComponent s) => definitions.decode(definitions.encode(s)!)! as Scatter3DComponent;
       List<ScatterLayer> trees() => [ScatterLayer(name: 'Trees', collision: ScatterCollision.capsule)];
-      final a = read(Scatter3D(layers: trees(), instances: [_piece(0, 0)]));
-      final b = read(Scatter3D(layers: trees(), instances: [_piece(20, 20), _piece(30, 30)]));
+      final a = read(Scatter3DComponent(layers: trees(), instances: [_piece(0, 0)]));
+      final b = read(Scatter3DComponent(layers: trees(), instances: [_piece(20, 20), _piece(30, 30)]));
       expect(a.revision, b.revision, reason: 'what made their keys the same');
       expect(a.solidKey, isNot(b.solidKey));
-      final shapes = ColliderShapes3D();
-      final collider = Collider3D(shape: ColliderShape3D.matchShape);
+      final shapes = Collider3DShapes();
+      final collider = Collider3DComponent(shape: Collider3DShape.matchShape);
       final one = Vector3(1, 1, 1);
       expect(identical(shapes.build(collider, one, source: a), shapes.build(collider, one, source: b)), isFalse);
     });
@@ -122,11 +122,11 @@ void main() {
 
   test('saved and read back', () {
     final world = World()..initialize();
-    Graphics3D.registerSchemas(world.context);
+    Graphics3D.registerDefinitions(world.context);
     WorldBuilderKit.install(world.context);
-    final scatter = Scatter3D(layers: starterScatterLayers(), instances: [_piece(1, 2, layer: 2)]);
+    final scatter = Scatter3DComponent(layers: starterScatterLayers(), instances: [_piece(1, 2, layer: 2)]);
     final definitions = world.context.definitions;
-    final back = definitions.decode(definitions.encode(scatter)!)! as Scatter3D;
+    final back = definitions.decode(definitions.encode(scatter)!)! as Scatter3DComponent;
     expect(back.layers.map((l) => l.name), ['Grass', 'Rocks', 'Trees']);
     expect(back.layers[2].collision, ScatterCollision.capsule);
     expect(back.instances.single.layer, 2);
@@ -139,12 +139,12 @@ void main() {
 
   test('drawn in batches by layer and square, not far off', () async {
     final service = Graphics3D(device: NullGpuDevice(shaders: rendererNullShaders));
-    final engine = Engine(config: EngineConfig(extensions: [WorldBuilderKit.extension], graphics3D: service));
+    final engine = Engine(config: EngineConfig(extensions: [WorldBuilderKit.extension], services: [service]));
     await engine.initialize();
     addTearDown(engine.dispose);
     engine.world.createEntityWithComponents([
       TransformComponent(),
-      Scatter3D(
+      Scatter3DComponent(
         layers: [ScatterLayer(name: 'Grass', maxDistance: 50), ScatterLayer(name: 'Rocks')],
         instances: [_piece(1, 1), _piece(2, 2), _piece(40, 1), _piece(3, 3, layer: 1)],
       ),
@@ -170,7 +170,7 @@ void main() {
 
     setUp(() {
       final world = World()..initialize();
-      Graphics3D.registerSchemas(world.context);
+      Graphics3D.registerDefinitions(world.context);
       WorldBuilderKit.install(world.context);
       scope = EditorScope(world: world, modules: [WorldBuilderModule()], builtIns: const [BuiltInEditorModule.new]);
       addTearDown(scope.dispose);
@@ -179,10 +179,10 @@ void main() {
       // A floor to scatter on: its top at y = 0.
       final floor = world.createEntityWithComponents([
         TransformComponent(position: Vector3(0, 0.5, 0)),
-        Cube3D(width: 40, height: 1, depth: 40),
+        Cube3DComponent(width: 40, height: 1, depth: 40),
       ], name: 'Floor');
       scope.sceneState.registerEntity(floor);
-      view = OrbitFlyEditorView.of(Camera(viewportSize: const Size(400, 400)))
+      view = OrbitFlyEditorView.of(OutputCamera(viewportSize: const Size(400, 400)))
         ..viewportSize = const Size(400, 400)
         ..pivot.setValues(0, 0, 0)
         ..distance = 40
@@ -206,7 +206,7 @@ void main() {
     void press(Vector3 p) => session.onPointerDown(Offset.zero, 32, screen: at(p), canvasSize: const Size(400, 400));
     void move(Vector3 p) => session.onPointerMove(Offset.zero, 32, screen: at(p), canvasSize: const Size(400, 400));
     void release(Vector3 p) => session.onPointerUp(Offset.zero, 32, screen: at(p), canvasSize: const Size(400, 400));
-    Scatter3D scatter() => scope.world.query([Scatter3D]).single.getComponent<Scatter3D>()!;
+    Scatter3DComponent scatter() => scope.world.query([Scatter3DComponent]).single.getComponent<Scatter3DComponent>()!;
 
     test('a stroke scatters grass on the floor, apart; one undo step', () {
       press(Vector3(0, 0, 0));
@@ -226,7 +226,7 @@ void main() {
       }
       expect(scope.history.undoEntries, hasLength(1));
       scope.history.undo();
-      expect(scope.world.query([Scatter3D]), isEmpty);
+      expect(scope.world.query([Scatter3DComponent]), isEmpty);
     });
 
     test('a second stroke is its own step; Shift erases', () {
@@ -246,7 +246,7 @@ void main() {
     });
 
     Entity scatterOf(List<ScatterLayer> layers, List<ScatterInstance> pieces, {String? name}) {
-      final e = scope.world.createEntityWithComponents([TransformComponent(), Scatter3D(layers: layers, instances: pieces)], name: name);
+      final e = scope.world.createEntityWithComponents([TransformComponent(), Scatter3DComponent(layers: layers, instances: pieces)], name: name);
       scope.sceneState
         ..registerEntity(e)
         ..selectEntity(e);
@@ -256,7 +256,7 @@ void main() {
     test('a stroke that erases as many as it scatters is still a step', () {
       // So far apart that one piece fills the floor.
       final e = scatterOf([ScatterLayer(name: 'Big', spacing: 100)], [_piece(0, 0)], name: 'Big');
-      final s = e.getComponent<Scatter3D>()!;
+      final s = e.getComponent<Scatter3DComponent>()!;
       final original = s.instances.single;
       modifiers = const ModifierKeys(shift: true);
       press(Vector3(0, 0, 0));
@@ -275,14 +275,14 @@ void main() {
       press(Vector3(0, 0, 0));
       move(Vector3(4, 0, 0));
       release(Vector3(4, 0, 0));
-      expect(e.getComponent<Scatter3D>()!.instances, isEmpty);
+      expect(e.getComponent<Scatter3DComponent>()!.instances, isEmpty);
     });
 
     test('a stroke into an unnamed scatter is undone like any other', () {
       final e = scatterOf(starterScatterLayers(), []);
       press(Vector3(0, 0, 0));
       release(Vector3(0, 0, 0));
-      final s = e.getComponent<Scatter3D>()!;
+      final s = e.getComponent<Scatter3DComponent>()!;
       expect(s.instances, isNotEmpty);
       scope.history.undo();
       expect(s.instances, isEmpty);
@@ -290,7 +290,7 @@ void main() {
 
     test('a layer taken out takes its pieces; those after it keep theirs', () {
       final e = scatterOf(starterScatterLayers(), [_piece(0, 0), _piece(5, 0, layer: 1), _piece(9, 0, layer: 2)]);
-      final s = e.getComponent<Scatter3D>()!;
+      final s = e.getComponent<Scatter3DComponent>()!;
       removeScatterLayer(scope, s, 1);
       expect(s.layers.map((l) => l.name), ['Grass', 'Trees']);
       expect([for (final p in s.instances) (p.position.x, s.layers[p.layer].name)], [(0.0, 'Grass'), (9.0, 'Trees')]);

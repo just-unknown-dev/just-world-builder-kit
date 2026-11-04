@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:just_editor_core/just_editor_core.dart';
 import 'package:just_game_engine/just_game_engine.dart';
-import 'package:just_game_engine/physics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_signals/just_signals.dart';
 
 import '../terrain/terrain_brush.dart';
-import '../terrain/terrain_component.dart';
+import '../terrain/terrain_3d_component.dart';
 import '../terrain/terrain_data.dart';
 import 'panel_parts.dart';
 import 'spline_tools.dart' show adoptEntities;
@@ -66,7 +66,7 @@ final class TerrainBrushSpot {
   /// Metres across, from the middle.
   final double radius;
 
-  final Terrain3D terrain;
+  final Terrain3DComponent terrain;
   final Matrix4 toWorld;
 }
 
@@ -130,13 +130,13 @@ class TerrainSculptTool extends LevelToolHandler {
   /// The terrain it shapes: the selected one, else the scene's first.
   Entity? get target {
     final selected = designer.sceneState.selectedEntity.value;
-    if (selected != null && selected.hasComponent<Terrain3D>()) return selected;
-    return designer.world.query([Terrain3D]).firstOrNull;
+    if (selected != null && selected.hasComponent<Terrain3DComponent>()) return selected;
+    return designer.world.query([Terrain3DComponent]).firstOrNull;
   }
 
   /// Where the pointer meets [entity]'s ground, in its space.
   Vector3? _groundUnder(SpaceContext space, Entity entity) {
-    final t = entity.getComponent<Terrain3D>()!..link(_files);
+    final t = entity.getComponent<Terrain3DComponent>()!..link(_files);
     final toWorld = Matrix4.identity();
     entity.getComponent<TransformComponent>()?.localToWorldInto(toWorld);
     final toLocal = Matrix4.identity();
@@ -158,11 +158,11 @@ class TerrainSculptTool extends LevelToolHandler {
     }
     final toWorld = Matrix4.identity();
     entity.getComponent<TransformComponent>()?.localToWorldInto(toWorld);
-    spot.value = TerrainBrushSpot(at, radius.value, entity.getComponent<Terrain3D>()!, toWorld);
+    spot.value = TerrainBrushSpot(at, radius.value, entity.getComponent<Terrain3DComponent>()!, toWorld);
   }
 
   /// One dab at [at] (the terrain's space).
-  void _dab(Terrain3D t, TerrainData data, Vector3 at, bool shift) {
+  void _dab(Terrain3DComponent t, TerrainData data, Vector3 at, bool shift) {
     final cell = t.cellSize;
     final x = (at.x - t.origin) / cell, z = (at.z - t.origin) / cell;
     final r = radius.value / cell;
@@ -194,7 +194,7 @@ class TerrainSculptTool extends LevelToolHandler {
       context.controller.setStatus('Make a terrain in the Terrain panel first');
       return true;
     }
-    final t = entity.getComponent<Terrain3D>()!..link(_files);
+    final t = entity.getComponent<Terrain3DComponent>()!..link(_files);
     final data = t.loaded;
     final at = _groundUnder(space, entity);
     if (data == null || at == null) return true;
@@ -212,7 +212,7 @@ class TerrainSculptTool extends LevelToolHandler {
   void onPointerMove(ToolContext context) {
     final space = context.space, entity = _entity;
     if (space == null || entity == null) return;
-    final t = entity.getComponent<Terrain3D>()!;
+    final t = entity.getComponent<Terrain3DComponent>()!;
     final data = t.loaded;
     final at = _groundUnder(space, entity);
     if (data == null || at == null) return;
@@ -233,7 +233,7 @@ class TerrainSculptTool extends LevelToolHandler {
     _entity = null;
     _last = null;
     if (entity == null || _before.isEmpty) return;
-    final t = entity.getComponent<Terrain3D>()!;
+    final t = entity.getComponent<Terrain3DComponent>()!;
     final data = t.loaded;
     if (data == null) return;
     data.settle();
@@ -278,7 +278,7 @@ class TerrainSculptTool extends LevelToolHandler {
   @override
   void onCancel() {
     final entity = _entity;
-    final data = entity?.getComponent<Terrain3D>()?.loaded;
+    final data = entity?.getComponent<Terrain3DComponent>()?.loaded;
     if (data != null) {
       for (final b in _before.values) {
         data.restore(b);
@@ -388,9 +388,9 @@ Entity makeTerrain(DesignerToolContext designer, {required String sceneName, dou
   final entity = designer.world.createEntityWithComponents(
     [
       TransformComponent(),
-      Terrain3D(data: path, size: size, resolution: resolution),
-      RigidBody3D(bodyType: BodyType3D.static),
-      Collider3D(shape: ColliderShape3D.matchShape),
+      Terrain3DComponent(data: path, size: size, resolution: resolution),
+      RigidBody3DComponent(bodyType: Body3DType.static),
+      Collider3DComponent(shape: Collider3DShape.matchShape),
     ],
     name: name,
   );
@@ -402,7 +402,7 @@ Entity makeTerrain(DesignerToolContext designer, {required String sceneName, dou
 /// shares — as one undo step. Its name is one no file has, here or on
 /// disk under [root] (the project folder) when given.
 void makeTerrainUnique(EditorScope scope, Entity entity, {required String sceneName, String? root}) {
-  final t = entity.getComponent<Terrain3D>();
+  final t = entity.getComponent<Terrain3DComponent>();
   final data = t?.loaded;
   if (t == null || data == null) return;
   final files = TerrainFiles.of(scope.context);
@@ -487,10 +487,10 @@ class _TerrainPanelState extends State<_TerrainPanel> {
       signal3: tool.mode,
       builder: (context, _, _, mode, _) {
         final entity = tool.target;
-        final terrain = entity?.getComponent<Terrain3D>();
+        final terrain = entity?.getComponent<Terrain3DComponent>();
         final scene = session.sceneState.activeScene.value?.name ?? 'scene';
         final shared = terrain != null &&
-            session.world.query([Terrain3D]).where((e) => e.getComponent<Terrain3D>()!.data == terrain.data).length > 1;
+            session.world.query([Terrain3DComponent]).where((e) => e.getComponent<Terrain3DComponent>()!.data == terrain.data).length > 1;
         final n = terrain?.loaded?.resolution ?? terrain?.resolution ?? 0;
         return Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),

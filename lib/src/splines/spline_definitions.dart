@@ -7,7 +7,7 @@ import 'spline_path.dart';
 import 'spline_render.dart';
 import 'spline_sweep.dart';
 
-/// A [Spline3D]'s points, saved as a list of `{p, in, out, roll, mode}`.
+/// A [Spline3DComponent]'s points, saved as a list of `{p, in, out, roll, mode}`.
 ///
 /// Read and written as copies, so a value an editor keeps for undo never
 /// moves with the spline.
@@ -30,7 +30,7 @@ class SplinePointsFieldType extends FieldType<List<SplinePoint>> {
 
 /// How the kit's spline components are saved, loaded and shown: all 3-D,
 /// in the group "World Builder".
-abstract final class SplineSchemas {
+abstract final class SplineDefinitions {
   static const String _group = 'World Builder';
   static const Color _accent = Color(0xFF26A69A);
 
@@ -46,7 +46,7 @@ abstract final class SplineSchemas {
   static const _followMode = EnumFieldType(FollowMode.values, fallback: FollowMode.pingPong, id: 'worldBuilder.followMode');
 
   /// Every one.
-  static List<ComponentSchema> get all => [spline, sweep, instances, follower];
+  static List<ComponentDefinition> get all => [spline, sweep, instances, follower];
 
   static ComponentHints _hints(String name, String description, IconData icon, Map<String, FieldHint> fields) =>
       ComponentHints(
@@ -66,11 +66,11 @@ abstract final class SplineSchemas {
         scrub: ScrubHint(step: step, fractionDigits: digits, suffix: suffix),
       );
 
-  /// [Spline3D].
-  static ComponentSchema<Spline3D> get spline => ComponentSchema<Spline3D>(
-    type: 'Spline3D',
+  /// [Spline3DComponent].
+  static ComponentDefinition<Spline3DComponent> get spline => ComponentDefinition<Spline3DComponent>(
+    type: 'Spline3DComponent',
     id: 'spline_3d_5d1e8a37',
-    create: Spline3D.new,
+    create: Spline3DComponent.new,
     extent: const _SplineExtent(),
     hints: _hints(
       'Spline 3D',
@@ -83,33 +83,33 @@ abstract final class SplineSchemas {
       },
     ),
     fields: [
-      SchemaField(
+      FieldDefinition(
         name: 'points',
         kind: splinePoints,
-        read: (c) => [for (final p in (c as Spline3D).points) p.copy()],
-        write: (c, v) => (c as Spline3D).points = [
+        read: (c) => [for (final p in (c as Spline3DComponent).points) p.copy()],
+        write: (c, v) => (c as Spline3DComponent).points = [
           for (final p in (v as List?) ?? const []) p is SplinePoint ? p.copy() : SplinePoint.fromJson(p),
         ],
       ),
-      _bool<Spline3D>('closed', (c) => c.closed, (c, v) => c.closed = v),
-      SchemaField(
+      _bool<Spline3DComponent>('closed', (c) => c.closed, (c, v) => c.closed = v),
+      FieldDefinition(
         name: 'interpolation',
         kind: _interpolation,
-        read: (c) => (c as Spline3D).interpolation,
-        write: (c, v) => (c as Spline3D).interpolation = v as SplineInterpolation,
+        read: (c) => (c as Spline3DComponent).interpolation,
+        write: (c, v) => (c as Spline3DComponent).interpolation = v as SplineInterpolation,
       ),
     ],
   );
 
-  static bool _isPipe(Component c) => (c as SplineSweep3D).profile == SweepProfile.pipe;
+  static bool _isPipe(Component c) => (c as SplineSweep3DComponent).profile == SweepProfile.pipe;
   static bool _notPipe(Component c) => !_isPipe(c);
-  static bool _ownLook(Component c) => (c as SplineSweep3D).material.isEmpty;
+  static bool _ownLook(Component c) => (c as SplineSweep3DComponent).material.isEmpty;
 
-  /// [SplineSweep3D].
-  static ComponentSchema<SplineSweep3D> get sweep => ComponentSchema<SplineSweep3D>(
-    type: 'SplineSweep3D',
+  /// [SplineSweep3DComponent].
+  static ComponentDefinition<SplineSweep3DComponent> get sweep => ComponentDefinition<SplineSweep3DComponent>(
+    type: 'SplineSweep3DComponent',
     id: 'spline_sweep_3d_9b47c2e0',
-    create: SplineSweep3D.new,
+    create: SplineSweep3DComponent.new,
     extent: const _SweepExtent(),
     hints: _hints(
       'Spline Sweep 3D',
@@ -145,39 +145,39 @@ abstract final class SplineSchemas {
       },
     ),
     fields: [
-      SchemaField(
+      FieldDefinition(
         name: 'profile',
         kind: _profile,
-        read: (c) => (c as SplineSweep3D).profile,
-        write: (c, v) => (c as SplineSweep3D).profile = v as SweepProfile,
+        read: (c) => (c as SplineSweep3DComponent).profile,
+        write: (c, v) => (c as SplineSweep3DComponent).profile = v as SweepProfile,
       ),
-      _decimal<SplineSweep3D>('width', (c) => c.width, (c, v) => c.width = v),
-      _decimal<SplineSweep3D>('height', (c) => c.height, (c, v) => c.height = v),
-      _decimal<SplineSweep3D>('radius', (c) => c.radius, (c, v) => c.radius = v),
-      _decimal<SplineSweep3D>('step', (c) => c.step, (c, v) => c.step = v),
-      _int<SplineSweep3D>('sides', (c) => c.sides, (c, v) => c.sides = v),
-      SchemaField(
+      _decimal<SplineSweep3DComponent>('width', (c) => c.width, (c, v) => c.width = v),
+      _decimal<SplineSweep3DComponent>('height', (c) => c.height, (c, v) => c.height = v),
+      _decimal<SplineSweep3DComponent>('radius', (c) => c.radius, (c, v) => c.radius = v),
+      _decimal<SplineSweep3DComponent>('step', (c) => c.step, (c, v) => c.step = v),
+      _int<SplineSweep3DComponent>('sides', (c) => c.sides, (c, v) => c.sides = v),
+      FieldDefinition(
         name: 'material',
         kind: FieldTypes.assetRef,
-        read: (c) => (c as SplineSweep3D).material,
-        write: (c, v) => (c as SplineSweep3D).material = v as String? ?? '',
+        read: (c) => (c as SplineSweep3DComponent).material,
+        write: (c, v) => (c as SplineSweep3DComponent).material = v as String? ?? '',
       ),
-      SchemaField(
+      FieldDefinition(
         name: 'color',
         kind: FieldTypes.color,
-        read: (c) => (c as SplineSweep3D).color,
-        write: (c, v) => (c as SplineSweep3D).color = v as Color,
+        read: (c) => (c as SplineSweep3DComponent).color,
+        write: (c, v) => (c as SplineSweep3DComponent).color = v as Color,
       ),
-      _decimal<SplineSweep3D>('tiling', (c) => c.tiling, (c, v) => c.tiling = v),
-      _bool<SplineSweep3D>('castShadows', (c) => c.castShadows, (c, v) => c.castShadows = v),
+      _decimal<SplineSweep3DComponent>('tiling', (c) => c.tiling, (c, v) => c.tiling = v),
+      _bool<SplineSweep3DComponent>('castShadows', (c) => c.castShadows, (c, v) => c.castShadows = v),
     ],
   );
 
-  /// [SplineInstances3D].
-  static ComponentSchema<SplineInstances3D> get instances => ComponentSchema<SplineInstances3D>(
-    type: 'SplineInstances3D',
+  /// [SplineInstances3DComponent].
+  static ComponentDefinition<SplineInstances3DComponent> get instances => ComponentDefinition<SplineInstances3DComponent>(
+    type: 'SplineInstances3DComponent',
     id: 'spline_instances_3d_e3a6f514',
-    create: SplineInstances3D.new,
+    create: SplineInstances3DComponent.new,
     extent: const _InstancesExtent(),
     hints: _hints(
       'Spline Instances 3D',
@@ -199,27 +199,27 @@ abstract final class SplineSchemas {
       },
     ),
     fields: [
-      SchemaField(
+      FieldDefinition(
         name: 'model',
         kind: FieldTypes.assetRef,
-        read: (c) => (c as SplineInstances3D).model,
-        write: (c, v) => (c as SplineInstances3D).model = v as String? ?? '',
+        read: (c) => (c as SplineInstances3DComponent).model,
+        write: (c, v) => (c as SplineInstances3DComponent).model = v as String? ?? '',
       ),
-      _decimal<SplineInstances3D>('spacing', (c) => c.spacing, (c, v) => c.spacing = v),
-      _decimal<SplineInstances3D>('startAt', (c) => c.startAt, (c, v) => c.startAt = v),
-      _decimal<SplineInstances3D>('sideOffset', (c) => c.sideOffset, (c, v) => c.sideOffset = v),
-      _bool<SplineInstances3D>('alignToPath', (c) => c.alignToPath, (c, v) => c.alignToPath = v),
-      _decimal<SplineInstances3D>('scale', (c) => c.scale, (c, v) => c.scale = v),
-      _decimal<SplineInstances3D>('maxDistance', (c) => c.maxDistance, (c, v) => c.maxDistance = v),
-      _bool<SplineInstances3D>('castShadows', (c) => c.castShadows, (c, v) => c.castShadows = v),
+      _decimal<SplineInstances3DComponent>('spacing', (c) => c.spacing, (c, v) => c.spacing = v),
+      _decimal<SplineInstances3DComponent>('startAt', (c) => c.startAt, (c, v) => c.startAt = v),
+      _decimal<SplineInstances3DComponent>('sideOffset', (c) => c.sideOffset, (c, v) => c.sideOffset = v),
+      _bool<SplineInstances3DComponent>('alignToPath', (c) => c.alignToPath, (c, v) => c.alignToPath = v),
+      _decimal<SplineInstances3DComponent>('scale', (c) => c.scale, (c, v) => c.scale = v),
+      _decimal<SplineInstances3DComponent>('maxDistance', (c) => c.maxDistance, (c, v) => c.maxDistance = v),
+      _bool<SplineInstances3DComponent>('castShadows', (c) => c.castShadows, (c, v) => c.castShadows = v),
     ],
   );
 
-  /// [PathFollower3D].
-  static ComponentSchema<PathFollower3D> get follower => ComponentSchema<PathFollower3D>(
-    type: 'PathFollower3D',
+  /// [PathFollower3DComponent].
+  static ComponentDefinition<PathFollower3DComponent> get follower => ComponentDefinition<PathFollower3DComponent>(
+    type: 'PathFollower3DComponent',
     id: 'path_follower_3d_47c90b2d',
-    create: PathFollower3D.new,
+    create: PathFollower3DComponent.new,
     hints: _hints(
       'Path Follower 3D',
       'Moves its entity along another\'s spline — a platform\'s route (give it a kinematic body), a train\'s track.',
@@ -234,52 +234,52 @@ abstract final class SplineSchemas {
       },
     ),
     fields: [
-      SchemaField(
+      FieldDefinition(
         name: 'path',
         kind: FieldTypes.target,
-        read: (c) => (c as PathFollower3D).path,
-        write: (c, v) => (c as PathFollower3D).path = v as EntityTarget? ?? EntityTarget.none,
+        read: (c) => (c as PathFollower3DComponent).path,
+        write: (c, v) => (c as PathFollower3DComponent).path = v as EntityTarget? ?? EntityTarget.none,
       ),
-      _decimal<PathFollower3D>('speed', (c) => c.speed, (c, v) => c.speed = v),
-      SchemaField(
+      _decimal<PathFollower3DComponent>('speed', (c) => c.speed, (c, v) => c.speed = v),
+      FieldDefinition(
         name: 'mode',
         kind: _followMode,
-        read: (c) => (c as PathFollower3D).mode,
-        write: (c, v) => (c as PathFollower3D).mode = v as FollowMode,
+        read: (c) => (c as PathFollower3DComponent).mode,
+        write: (c, v) => (c as PathFollower3DComponent).mode = v as FollowMode,
       ),
-      _decimal<PathFollower3D>('wait', (c) => c.wait, (c, v) => c.wait = v),
-      _decimal<PathFollower3D>('startAt', (c) => c.startAt, (c, v) => c.startAt = v),
-      _bool<PathFollower3D>('faceAlong', (c) => c.faceAlong, (c, v) => c.faceAlong = v),
+      _decimal<PathFollower3DComponent>('wait', (c) => c.wait, (c, v) => c.wait = v),
+      _decimal<PathFollower3DComponent>('startAt', (c) => c.startAt, (c, v) => c.startAt = v),
+      _bool<PathFollower3DComponent>('faceAlong', (c) => c.faceAlong, (c, v) => c.faceAlong = v),
     ],
   );
 
-  static SchemaField _decimal<T extends Component>(
+  static FieldDefinition _decimal<T extends Component>(
     String name,
     double Function(T c) read,
     void Function(T c, double v) write,
-  ) => SchemaField(
+  ) => FieldDefinition(
     name: name,
     kind: FieldTypes.decimal,
     read: (c) => read(c as T),
     write: (c, v) => write(c as T, (v as num).toDouble()),
   );
 
-  static SchemaField _int<T extends Component>(
+  static FieldDefinition _int<T extends Component>(
     String name,
     int Function(T c) read,
     void Function(T c, int v) write,
-  ) => SchemaField(
+  ) => FieldDefinition(
     name: name,
     kind: FieldTypes.integer,
     read: (c) => read(c as T),
     write: (c, v) => write(c as T, (v as num).toInt()),
   );
 
-  static SchemaField _bool<T extends Component>(
+  static FieldDefinition _bool<T extends Component>(
     String name,
     bool Function(T c) read,
     void Function(T c, bool v) write,
-  ) => SchemaField(
+  ) => FieldDefinition(
     name: name,
     kind: FieldTypes.boolean,
     read: (c) => read(c as T),
@@ -293,7 +293,7 @@ Size? _front(Aabb3 b) => b.isEmpty ? null : Size(b.max.x - b.min.x, b.max.y - b.
 final Expando<(Object, SplinePath)> _paths = Expando();
 
 /// [spline]'s path, sampled again only when it changed.
-SplinePath _pathOf(Spline3D spline) {
+SplinePath _pathOf(Spline3DComponent spline) {
   final key = spline.shapeKey;
   final known = _paths[spline];
   if (known != null && known.$1 == key) return known.$2;
@@ -317,7 +317,7 @@ final class _SplineExtent extends ComponentExtent {
 
   @override
   bool boundsInto(Component component, Aabb3 out) {
-    final positions = _pathOf(component as Spline3D).positions;
+    final positions = _pathOf(component as Spline3DComponent).positions;
     if (positions.isEmpty) return false;
     out.setEmpty();
     for (final p in positions) {
@@ -347,7 +347,7 @@ final class _SweepExtent extends ComponentExtent {
 
   @override
   bool boundsInto(Component component, Aabb3 out) {
-    final sweep = component as SplineSweep3D;
+    final sweep = component as SplineSweep3DComponent;
     final spline = sweep.spline;
     if (spline == null) return false;
     final mesh = SplineSweeper.meshFor(sweep, spline);
@@ -374,7 +374,7 @@ final class _InstancesExtent extends ComponentExtent {
 
   @override
   bool boundsInto(Component component, Aabb3 out) {
-    final c = component as SplineInstances3D;
+    final c = component as SplineInstances3DComponent;
     final spline = c.spline;
     if (spline == null) return false;
     final places = InstancesRenderProvider.placements(c, _pathOf(spline));

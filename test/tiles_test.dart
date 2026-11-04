@@ -8,25 +8,25 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
-import 'package:just_game_engine/physics_3d.dart';
 import 'package:just_game_engine_editor/just_game_engine_editor.dart';
 import 'package:just_world_builder_kit/editor.dart';
 import 'package:just_world_builder_kit/just_world_builder_kit.dart';
+import 'package:just_graphics_engine/just_graphics_engine.dart' show NullGpuDevice, RenderView, rendererNullShaders;
 
 const String _path = 'assets/tiles/test.meshlib.json';
 
 /// A library of a 2 m block (solid as its cell), a ramp (solid as its
 /// shape) and grass (not solid).
 MeshLibrary _library(ComponentDefinitionRegistry definitions) {
-  Map<String, Object?> shape(Primitive3D p) => Map<String, Object?>.from(definitions.encode(p)!);
+  Map<String, Object?> shape(Primitive3DComponent p) => Map<String, Object?>.from(definitions.encode(p)!);
   return MeshLibrary(
     cellSize: 2,
     items: [
-      MeshLibraryItem(id: 1, name: 'Block', shape: shape(Cube3D(width: 2, height: 2, depth: 2))),
-      MeshLibraryItem(id: 2, name: 'Ramp', shape: shape(Ramp3D(width: 2, height: 2, depth: 2)), collision: PieceCollision.shape),
-      MeshLibraryItem(id: 3, name: 'Grass', shape: shape(Cube3D(width: 2, height: 0.1, depth: 2)), collision: PieceCollision.none),
+      MeshLibraryItem(id: 1, name: 'Block', shape: shape(Cube3DComponent(width: 2, height: 2, depth: 2))),
+      MeshLibraryItem(id: 2, name: 'Ramp', shape: shape(Ramp3DComponent(width: 2, height: 2, depth: 2)), collision: PieceCollision.shape),
+      MeshLibraryItem(id: 3, name: 'Grass', shape: shape(Cube3DComponent(width: 2, height: 0.1, depth: 2)), collision: PieceCollision.none),
     ],
   );
 }
@@ -73,10 +73,10 @@ void main() {
   group('cells', () {
     test('a cell\'s key and back, below zero too', () {
       for (final (x, y, z) in [(0, 0, 0), (-1, -5, 7), (32767, -32768, 12), (-300, 2, -9)]) {
-        final c = GridTiles3D.cellOf(GridTiles3D.keyOf(x, y, z));
+        final c = GridTiles3DComponent.cellOf(GridTiles3DComponent.keyOf(x, y, z));
         expect([c.x, c.y, c.z], [x, y, z]);
       }
-      final t = GridTiles3D.unpack(GridTiles3D.pack(1234, 23));
+      final t = GridTiles3DComponent.unpack(GridTiles3DComponent.pack(1234, 23));
       expect([t.item, t.orientation], [1234, 23]);
     });
 
@@ -84,7 +84,7 @@ void main() {
       final random = math.Random(7);
       final cells = <int, int>{
         for (var i = 0; i < 1000; i++)
-          GridTiles3D.keyOf(random.nextInt(200) - 100, -random.nextInt(20), random.nextInt(200) - 100): GridTiles3D.pack(1 + random.nextInt(5), random.nextInt(24)),
+          GridTiles3DComponent.keyOf(random.nextInt(200) - 100, -random.nextInt(20), random.nextInt(200) - 100): GridTiles3DComponent.pack(1 + random.nextInt(5), random.nextInt(24)),
       };
       final text = GridCellsFieldType.encodeCells(cells);
       expect(GridCellsFieldType.decodeCells(text), cells);
@@ -99,7 +99,7 @@ void main() {
 
     setUp(() {
       world = World()..initialize();
-      Graphics3D.registerSchemas(world.context);
+      Graphics3D.registerDefinitions(world.context);
       WorldBuilderKit.install(world.context);
     });
 
@@ -122,7 +122,7 @@ void main() {
       await libraries.load(_path);
       final library = libraries.get(_path)!;
       expect(libraries.revision, greaterThan(before));
-      expect(libraries.shapeOf(_path, library.item(2)!), isA<Ramp3D>());
+      expect(libraries.shapeOf(_path, library.item(2)!), isA<Ramp3DComponent>());
       await libraries.load('assets/tiles/missing.meshlib.json');
       expect(libraries.errorOf('assets/tiles/missing.meshlib.json'), isNotNull);
     });
@@ -131,7 +131,7 @@ void main() {
       final library = _library(world.context.definitions);
       world.context.tiles.readText = (path) async => library.encode();
       await MeshLibraries.of(world.context).load(_path);
-      final tiles = GridTiles3D(library: _path);
+      final tiles = GridTiles3DComponent(library: _path);
       for (var x = 0; x < 3; x++) {
         tiles.setTile(x, -1, 0, 1);
       }
@@ -158,7 +158,7 @@ void main() {
       world.context.tiles.readText = (path) async => text;
       final libraries = MeshLibraries.of(world.context);
       await libraries.load(_path);
-      final tiles = GridTiles3D(library: _path)
+      final tiles = GridTiles3DComponent(library: _path)
         ..setTile(0, -1, 0, 1) // a floor, on the ground
         ..setTile(3, -1, 0, 3) // a wall
         ..link(libraries);
@@ -189,7 +189,7 @@ void main() {
             id: 1,
             name: 'Broken',
             shape: {
-              'type': 'Ramp3D',
+              'type': 'Ramp3DComponent',
               'fields': {'height': 'tall'},
             },
             collision: PieceCollision.shape,
@@ -199,7 +199,7 @@ void main() {
       world.context.tiles.readText = (path) async => bad.encode();
       final libraries = MeshLibraries.of(world.context);
       await libraries.load(_path);
-      final tiles = GridTiles3D(library: _path)
+      final tiles = GridTiles3DComponent(library: _path)
         ..setTile(0, -1, 0, 1)
         ..link(libraries);
       final box = tiles.solidParts.single as SolidBox;
@@ -214,14 +214,14 @@ void main() {
       final libraries = MeshLibraries.of(world.context);
       await libraries.load(_path);
       final definitions = world.context.definitions;
-      GridTiles3D read(GridTiles3D tiles) => (definitions.decode(definitions.encode(tiles)!)! as GridTiles3D)..link(libraries);
-      final a = read(GridTiles3D(library: _path)..setTile(0, -1, 0, 1));
-      final b = read(GridTiles3D(library: _path)..setTile(5, -1, 5, 1)..setTile(6, -1, 5, 1));
+      GridTiles3DComponent read(GridTiles3DComponent tiles) => (definitions.decode(definitions.encode(tiles)!)! as GridTiles3DComponent)..link(libraries);
+      final a = read(GridTiles3DComponent(library: _path)..setTile(0, -1, 0, 1));
+      final b = read(GridTiles3DComponent(library: _path)..setTile(5, -1, 5, 1)..setTile(6, -1, 5, 1));
       expect(a.revision, b.revision, reason: 'what made their keys the same');
       expect(a.solidKey, isNot(b.solidKey));
       // The engine keeps shapes by key: each its own.
-      final shapes = ColliderShapes3D();
-      final collider = Collider3D(shape: ColliderShape3D.matchShape);
+      final shapes = Collider3DShapes();
+      final collider = Collider3DComponent(shape: Collider3DShape.matchShape);
       final one = Vector3(1, 1, 1);
       expect(identical(shapes.build(collider, one, source: a), shapes.build(collider, one, source: b)), isFalse);
       expect(identical(shapes.build(collider, one, source: a), shapes.build(collider, one, source: a)), isTrue);
@@ -246,7 +246,7 @@ void main() {
 
     setUp(() async {
       service = Graphics3D(device: NullGpuDevice(shaders: rendererNullShaders));
-      engine = Engine(config: EngineConfig(extensions: [WorldBuilderKit.extension], graphics3D: service));
+      engine = Engine(config: EngineConfig(extensions: [WorldBuilderKit.extension], services: [service]));
       await engine.initialize();
     });
     tearDown(() => engine.dispose());
@@ -255,7 +255,7 @@ void main() {
       final library = _library(engine.world.context.definitions);
       engine.world.context.tiles.readText = (path) async => library.encode();
       await MeshLibraries.of(engine.world.context).load(_path);
-      final tiles = GridTiles3D(library: _path);
+      final tiles = GridTiles3DComponent(library: _path);
       for (var x = 0; x < 20; x++) {
         tiles.setTile(x, -1, 0, 1);
       }
@@ -286,7 +286,7 @@ void main() {
 
     setUp(() async {
       final world = World()..initialize();
-      Graphics3D.registerSchemas(world.context);
+      Graphics3D.registerDefinitions(world.context);
       WorldBuilderKit.install(world.context);
       final text = _library(world.context.definitions).encode();
       world.context.tiles.readText = (path) async => text;
@@ -295,7 +295,7 @@ void main() {
       addTearDown(scope.dispose);
       scope.sceneState.openScene(EditorScene(name: 'level', mode: SceneMode.threeD));
       scope.selectDesigner('world_builder');
-      view = OrbitFlyEditorView.of(Camera(viewportSize: const Size(400, 400)))
+      view = OrbitFlyEditorView.of(OutputCamera(viewportSize: const Size(400, 400)))
         ..viewportSize = const Size(400, 400)
         ..pivot.setValues(4, 0, 4)
         ..distance = 30
@@ -327,18 +327,18 @@ void main() {
       release(p);
     }
 
-    GridTiles3D tiles() => scope.world.query([GridTiles3D]).single.getComponent<GridTiles3D>()!;
+    GridTiles3DComponent tiles() => scope.world.query([GridTiles3DComponent]).single.getComponent<GridTiles3DComponent>()!;
 
     test('a click on the floor: a tile there, in new tiles, one undo step', () {
       tool().onSurfaces.value = false;
       click(Vector3(1, 0, 1));
       final t = tiles();
       expect(t.tileAt(0, -1, 0), (item: 1, orientation: 0), reason: 'on the ground, a cell up');
-      final entity = scope.world.query([GridTiles3D]).single;
-      expect(entity.getComponent<Collider3D>()!.shape, ColliderShape3D.matchShape);
+      final entity = scope.world.query([GridTiles3DComponent]).single;
+      expect(entity.getComponent<Collider3DComponent>()!.shape, Collider3DShape.matchShape);
       expect(scope.history.undoEntries, hasLength(1));
       scope.history.undo();
-      expect(scope.world.query([GridTiles3D]), isEmpty);
+      expect(scope.world.query([GridTiles3DComponent]), isEmpty);
     });
 
     test('a drag paints a run; another stroke is its own undo step', () {
@@ -365,7 +365,7 @@ void main() {
       move(Vector3(3.6, 0, 1.4));
       move(Vector3(5, 0, 1));
       release(Vector3(5, 0, 1));
-      final cells = [for (final key in tiles().cells.keys) GridTiles3D.cellOf(key)];
+      final cells = [for (final key in tiles().cells.keys) GridTiles3DComponent.cellOf(key)];
       expect(cells.map((c) => c.y).toSet(), {-1}, reason: 'one level: $cells');
       expect(cells, hasLength(3));
     });
@@ -375,32 +375,32 @@ void main() {
       final small = MeshLibrary(
         cellSize: 1,
         items: [
-          MeshLibraryItem(id: 10, name: 'Brick', shape: Map<String, Object?>.from(scope.context.definitions.encode(Cube3D())!)),
+          MeshLibraryItem(id: 10, name: 'Brick', shape: Map<String, Object?>.from(scope.context.definitions.encode(Cube3DComponent())!)),
         ],
       );
       final text = _library(scope.context.definitions).encode();
       scope.context.tiles.readText = (path) async => path == other ? small.encode() : text;
       await MeshLibraries.of(scope.context).load(other);
-      final grid = scope.world.createEntityWithComponents([TransformComponent(), GridTiles3D(library: other)], name: 'Small');
+      final grid = scope.world.createEntityWithComponents([TransformComponent(), GridTiles3DComponent(library: other)], name: 'Small');
       scope.sceneState
         ..registerEntity(grid)
         ..selectEntity(grid);
       tool().onSurfaces.value = false;
       click(Vector3(1.5, 0, 0.5));
       expect(tool().library.value, other);
-      final cells = grid.getComponent<GridTiles3D>()!;
+      final cells = grid.getComponent<GridTiles3DComponent>()!;
       expect(cells.tileAt(1, -1, 0), (item: 10, orientation: 0), reason: 'its piece, on its 1 m cells');
-      expect(scope.world.query([GridTiles3D]), hasLength(1), reason: 'no grid of another library made');
+      expect(scope.world.query([GridTiles3DComponent]), hasLength(1), reason: 'no grid of another library made');
     });
 
     test('a stroke into an unnamed grid is undone like any other', () {
-      final grid = scope.world.createEntityWithComponents([TransformComponent(), GridTiles3D(library: _path)]);
+      final grid = scope.world.createEntityWithComponents([TransformComponent(), GridTiles3DComponent(library: _path)]);
       scope.sceneState
         ..registerEntity(grid)
         ..selectEntity(grid);
       tool().onSurfaces.value = false;
       click(Vector3(1, 0, 1));
-      final cells = grid.getComponent<GridTiles3D>()!;
+      final cells = grid.getComponent<GridTiles3DComponent>()!;
       expect(cells.cells, hasLength(1));
       scope.history.undo();
       expect(cells.cells, isEmpty);
@@ -467,7 +467,7 @@ void main() {
 
     testWidgets('a new library; pieces added, undone, saved', (tester) async {
       final world = World()..initialize();
-      Graphics3D.registerSchemas(world.context);
+      Graphics3D.registerDefinitions(world.context);
       final files = MeshLibraryFiles(dir.path);
       final path = (await tester.runAsync(() => files.create(world.context.definitions)))!;
       expect(path, 'assets/tiles/tiles${MeshLibrary.ending}');
@@ -509,7 +509,7 @@ void main() {
       expect(reloaded, [path]);
       final saved = MeshLibrary.parse(File('${dir.path}/$path').readAsStringSync());
       expect(saved.items.last.name, 'Arch');
-      expect(world.context.definitions.decode(Map<String, dynamic>.from(saved.items.last.shape!)), isA<Arch3D>());
+      expect(world.context.definitions.decode(Map<String, dynamic>.from(saved.items.last.shape!)), isA<Arch3DComponent>());
       expect(tester.takeException(), isNull);
     });
   });

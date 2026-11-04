@@ -3,9 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:just_editor_core/just_editor_core.dart';
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
-import 'package:just_game_engine/physics_3d.dart';
 import 'package:just_signals/just_signals.dart';
 
 /// The tool strip's group for blockout.
@@ -38,7 +37,7 @@ final class BlockoutPreview {
 /// plays at once.
 Entity _make(DesignerToolContext context, List<Component> components, String prefix, String label) {
   final entity = context.world.createEntityWithComponents(
-    [...components, RigidBody3D(bodyType: BodyType3D.static), Collider3D(shape: ColliderShape3D.matchShape)],
+    [...components, RigidBody3DComponent(bodyType: Body3DType.static), Collider3DComponent(shape: Collider3DShape.matchShape)],
     name: context.uniqueName(prefix),
   );
   context.history.pushApplied(
@@ -107,7 +106,7 @@ double _snap(double v, SpaceContext space) =>
 /// Blockout's Block: drag a footprint on any surface — the ground, a wall,
 /// the top of another block — then move the pointer for its height and
 /// click. A click alone makes a 1 m block on the surface. Makes a
-/// [Cube3D].
+/// [Cube3DComponent].
 class BlockTool extends LevelToolHandler {
   BlockTool(this.designer);
 
@@ -251,7 +250,7 @@ class BlockTool extends LevelToolHandler {
       designer,
       [
         TransformComponent(position: centre),
-        Cube3D(width: math.max(size.x, 0.01), height: math.max(size.y, 0.01), depth: math.max(size.z, 0.01)),
+        Cube3DComponent(width: math.max(size.x, 0.01), height: math.max(size.y, 0.01), depth: math.max(size.z, 0.01)),
       ],
       'Block',
       'Block out a box',
@@ -286,7 +285,7 @@ class BlockTool extends LevelToolHandler {
 /// Blockout's Floor: click round an outline on any level surface — Enter,
 /// a double-click or a click on the first corner closes it — for a floor
 /// slab that shape, its top on the surface. Backspace takes back a corner.
-/// Makes a [Polygon3D].
+/// Makes a [Polygon3DComponent].
 class FloorTool extends LevelToolHandler {
   FloorTool(this.designer);
 
@@ -407,7 +406,7 @@ class FloorTool extends LevelToolHandler {
     // below.
     _make(
       designer,
-      [TransformComponent(position: Vector3(cx, _level + t / 2, cz)), Polygon3D(points: points, height: t)],
+      [TransformComponent(position: Vector3(cx, _level + t / 2, cz)), Polygon3DComponent(points: points, height: t)],
       'Floor',
       'Block out a floor',
     );
@@ -437,8 +436,8 @@ enum SlopeKind { ramp, stairs }
 
 /// Blockout's Ramp: drag from where a slope starts at the bottom to where
 /// it reaches at the top — onto a ledge, say — for a ramp or a flight of
-/// stairs that wide, facing the way it was dragged. Makes a [Ramp3D] or a
-/// [Stairs3D].
+/// stairs that wide, facing the way it was dragged. Makes a [Ramp3DComponent] or a
+/// [Stairs3DComponent].
 class RampTool extends LevelToolHandler {
   RampTool(this.designer);
 
@@ -524,9 +523,9 @@ class RampTool extends LevelToolHandler {
       [
         transform,
         if (stairs)
-          Stairs3D(width: w, height: rise, depth: run.length, steps: math.max(2, (rise / stepHeight).round()))
+          Stairs3DComponent(width: w, height: rise, depth: run.length, steps: math.max(2, (rise / stepHeight).round()))
         else
-          Ramp3D(width: w, height: rise, depth: run.length),
+          Ramp3DComponent(width: w, height: rise, depth: run.length),
       ],
       stairs ? 'Stairs' : 'Ramp',
       stairs ? 'Block out stairs' : 'Block out a ramp',

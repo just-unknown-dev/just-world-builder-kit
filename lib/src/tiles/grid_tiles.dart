@@ -2,13 +2,13 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:just_deflate/just_deflate.dart';
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
 import 'grid_orientations.dart';
 import 'mesh_library.dart';
 
-/// A cell of a [GridTiles3D]: where it is, counted in cells.
+/// A cell of a [GridTiles3DComponent]: where it is, counted in cells.
 typedef GridCell = ({int x, int y, int z});
 
 /// What is in a cell: a [MeshLibrary] item, turned one of the
@@ -18,12 +18,12 @@ typedef GridTile = ({int item, int orientation});
 /// Tiles in a 3-D grid — floors, walls, ramps from a [MeshLibrary] — each
 /// cell holding one, turned any of 24 ways: a level built like bricks.
 /// Drawn by the kit's renderer, many to a draw; solid, through a
-/// `Collider3D` set to match its shape, as each item says.
+/// `Collider3DComponent` set to match its shape, as each item says.
 ///
 /// Cell (x, y, z) spans x to x + 1 cells along X, and so on: +Y is down,
 /// so the cells above the ground at y = 0 are y = -1, -2…
-class GridTiles3D extends Component implements SolidShapeSource {
-  GridTiles3D({this.library = '', Map<int, int>? cells, this.castShadows = true, this.maxDistance = 0})
+class GridTiles3DComponent extends Component implements SolidShapeSource {
+  GridTiles3DComponent({this.library = '', Map<int, int>? cells, this.castShadows = true, this.maxDistance = 0})
     : cells = cells ?? {};
 
   /// The mesh library (`.meshlib.json`) its items come from.
@@ -131,12 +131,12 @@ class GridTiles3D extends Component implements SolidShapeSource {
   }
 }
 
-/// What makes a [GridTiles3D] solid: a box for each run of box tiles along
+/// What makes a [GridTiles3DComponent] solid: a box for each run of box tiles along
 /// X — whole rows, not cell by cell — and each shape tile's own parts,
 /// turned with it.
 abstract final class GridTileSolids {
   /// [tiles]' solid parts, from [library].
-  static List<SolidPart> of(GridTiles3D tiles, MeshLibrary library, {Primitive3D? Function(MeshLibraryItem item)? shapeOf}) {
+  static List<SolidPart> of(GridTiles3DComponent tiles, MeshLibrary library, {Primitive3DComponent? Function(MeshLibraryItem item)? shapeOf}) {
     final c = library.cellSize;
     final half = c / 2;
     final out = <SolidPart>[];
@@ -144,13 +144,13 @@ abstract final class GridTileSolids {
     final rows = <(int, int), List<int>>{};
     final items = {for (final i in library.items) i.id: i};
     for (final MapEntry(:key, :value) in tiles.cells.entries) {
-      final tile = GridTiles3D.unpack(value);
+      final tile = GridTiles3DComponent.unpack(value);
       final item = items[tile.item];
       if (item == null || item.collision == PieceCollision.none) continue;
-      final cell = GridTiles3D.cellOf(key);
+      final cell = GridTiles3DComponent.cellOf(key);
       final shape = item.collision == PieceCollision.shape ? shapeOf?.call(item) : null;
       if (shape case final SolidShapeSource source) {
-        final centre = GridTiles3D.centreOf(cell.x, cell.y, cell.z, c);
+        final centre = GridTiles3DComponent.centreOf(cell.x, cell.y, cell.z, c);
         final at = centre + GridOrientations.apply(tile.orientation, item.offset);
         final turned = [for (final part in source.solidParts) _turned(part, tile.orientation, at, item.scale)];
         if (turned.isNotEmpty && !turned.contains(null)) {
@@ -235,7 +235,7 @@ abstract final class GridTileSolids {
   }
 }
 
-/// A [GridTiles3D]'s cells, saved as base64 of zlib-packed records — a
+/// A [GridTiles3DComponent]'s cells, saved as base64 of zlib-packed records — a
 /// version byte, then x, y, z (16 bits each) and the packed tile (32 bits)
 /// per cell, in key order.
 class GridCellsFieldType extends FieldType<Map<int, int>> {
@@ -266,7 +266,7 @@ class GridCellsFieldType extends FieldType<Map<int, int>> {
     final bytes = ByteData(1 + keys.length * 10)..setUint8(0, _version);
     var o = 1;
     for (final key in keys) {
-      final cell = GridTiles3D.cellOf(key);
+      final cell = GridTiles3DComponent.cellOf(key);
       bytes
         ..setInt16(o, cell.x, Endian.little)
         ..setInt16(o + 2, cell.y, Endian.little)
@@ -287,7 +287,7 @@ class GridCellsFieldType extends FieldType<Map<int, int>> {
     final bytes = ByteData.sublistView(raw);
     final out = <int, int>{};
     for (var o = 1; o < raw.length; o += 10) {
-      out[GridTiles3D.keyOf(
+      out[GridTiles3DComponent.keyOf(
         bytes.getInt16(o, Endian.little),
         bytes.getInt16(o + 2, Endian.little),
         bytes.getInt16(o + 4, Endian.little),

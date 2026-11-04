@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Requires just_game_engine ^2.0.0-dev.4.
+- Terrain and spline colours go linear through the engine's `LinearColor.of` (was `GraphicsShapes.linear`).
+- Installing the kit installs the engine's built-in components (`BuiltInComponents.extension`) too: its levels use them.
+- **Breaking**: every component's name ends in `Component`: `Scatter3DComponent`, `Spline3DComponent`, `SplineSweep3DComponent`, `SplineInstances3DComponent`, `PathFollower3DComponent`, `Terrain3DComponent` (file `terrain_3d_component.dart`) and `GridTiles3DComponent`. Levels saved before are renamed as they load (`WorldBuilderKit.renamedTypes`).
+- Mesh library format 2: a shape is saved under the engine's new name (`Cube3DComponent`); a version 1 library is read as before.
+- **Breaking**: `ScatterSchemas`, `SplineSchemas`, `TerrainSchemas` and `TileSchemas` are `ScatterDefinitions`, `SplineDefinitions`, `TerrainDefinitions` and `TileDefinitions` (files `*_definitions.dart`; were `*_schemas.dart`), and `WorldBuilderKit.schemas` is `WorldBuilderKit.definitions`, a list of `ComponentDefinition`s, now that the engine has folded `ComponentSchema` into it.
+- Requires just_game_engine_formats ^0.3.0: the kit depends on it directly, for the scene format's component renames (`V10ToV11.renames`) that the mesh library's older files follow.
+
 ## 0.1.0-beta.1
 
 First version: world building for just_game_engine in 3D.

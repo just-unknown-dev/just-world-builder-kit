@@ -34,13 +34,13 @@
   },
   "runtime": {
     "componentTypes": [
-      "GridTiles3D",
-      "PathFollower3D",
-      "Scatter3D",
-      "Spline3D",
-      "SplineInstances3D",
-      "SplineSweep3D",
-      "Terrain3D"
+      "GridTiles3DComponent",
+      "PathFollower3DComponent",
+      "Scatter3DComponent",
+      "Spline3DComponent",
+      "SplineInstances3DComponent",
+      "SplineSweep3DComponent",
+      "Terrain3DComponent"
     ],
     "extensions": [
       {
@@ -51,7 +51,7 @@
     ],
     "setup": {
       "file": "lib/game/third_person_game.dart",
-      "snippet": "// The kit's pieces are 3-D: EngineConfig(graphics3D: Graphics3D(),\n// physics3D: Physics3D()).\nWorldBuilderKit.registerSystems(engine.world);\n// After each level is loaded, before the game runs: its terrains and\n// tile libraries read, so they are solid from the first step.\nawait SceneLoader.loadAsset(engine.world, level);\nawait WorldBuilderKit.ready(engine.world);"
+      "snippet": "// The kit's pieces are 3-D: EngineConfig(services: [Graphics3D(),\n// Physics3D()]).\nWorldBuilderKit.registerSystems(engine.world);\n// After each level is loaded, before the game runs: its terrains and\n// tile libraries read, so they are solid from the first step.\nawait SceneLoader.loadAsset(engine.world, level);\nawait WorldBuilderKit.ready(engine.world);"
     }
   },
   "schema": 1,

@@ -5,7 +5,7 @@ import 'package:just_game_engine/just_game_engine.dart';
 
 import '../splines/spline_components.dart';
 import '../splines/spline_sweep.dart';
-import '../terrain/terrain_component.dart';
+import '../terrain/terrain_3d_component.dart';
 import '../tiles/grid_tiles.dart';
 
 /// Where a ray from the eye meets the kit's pieces, exactly: a tile's
@@ -20,9 +20,9 @@ final class WorldBuilderRayTest implements EntityRayTest, EntitySurfaceTest {
 
   @override
   RayTriangleHit? surfaceHit(Entity entity, Ray3 ray) {
-    final tiles = entity.getComponent<GridTiles3D>();
-    final sweep = entity.getComponent<SplineSweep3D>();
-    final terrain = entity.getComponent<Terrain3D>();
+    final tiles = entity.getComponent<GridTiles3DComponent>();
+    final sweep = entity.getComponent<SplineSweep3DComponent>();
+    final terrain = entity.getComponent<Terrain3DComponent>();
     final transform = entity.getComponent<TransformComponent>();
     if ((tiles == null && sweep == null && terrain == null) || transform == null) return null;
     final toWorld = Matrix4.identity();
@@ -45,7 +45,7 @@ final class WorldBuilderRayTest implements EntityRayTest, EntitySurfaceTest {
       known = true;
       consider(cellHit(tiles, origin, direction));
     }
-    final spline = sweep?.spline ?? entity.getComponent<Spline3D>();
+    final spline = sweep?.spline ?? entity.getComponent<Spline3DComponent>();
     if (sweep != null && spline != null) {
       final mesh = SplineSweeper.meshFor(sweep, spline);
       if (mesh != null) {
@@ -69,7 +69,7 @@ final class WorldBuilderRayTest implements EntityRayTest, EntitySurfaceTest {
   /// meets [terrain]'s ground, and the ground's normal there: marched in
   /// half cells through the box its ground fills, then narrowed down.
   /// Holes let it through.
-  static RayTriangleHit? groundHit(Terrain3D terrain, Vector3 origin, Vector3 direction) {
+  static RayTriangleHit? groundHit(Terrain3DComponent terrain, Vector3 origin, Vector3 direction) {
     final data = terrain.loaded;
     if (data == null) return null;
     final cell = terrain.cellSize, start = terrain.origin;
@@ -143,14 +143,14 @@ final class WorldBuilderRayTest implements EntityRayTest, EntitySurfaceTest {
 
   /// The nearest of [tiles]' cells the ray from [origin] along
   /// [direction] (in their space) enters, and the face it enters by.
-  static RayTriangleHit? cellHit(GridTiles3D tiles, Vector3 origin, Vector3 direction) {
+  static RayTriangleHit? cellHit(GridTiles3DComponent tiles, Vector3 origin, Vector3 direction) {
     final size = tiles.loaded?.cellSize;
     if (size == null) return null;
     double? best;
     final normal = Vector3.zero();
     final o = [origin.x, origin.y, origin.z], d = [direction.x, direction.y, direction.z];
     for (final key in tiles.cells.keys) {
-      final c = GridTiles3D.cellOf(key);
+      final c = GridTiles3DComponent.cellOf(key);
       final lo = [c.x * size, c.y * size, c.z * size];
       var near = double.negativeInfinity, far = double.infinity;
       var axis = -1;

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:just_editor_core/just_editor_core.dart';
 import 'package:just_game_engine/just_game_engine.dart';
-import 'package:just_game_engine/physics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_signals/just_signals.dart';
 
 import '../tiles/grid_orientations.dart';
@@ -43,7 +43,7 @@ final class GridTilePreview {
 }
 
 /// A stroke of the Tiles tool: cells as they were and as they became, on
-/// the [GridTiles3D] of [entity] — found again as the editor finds an
+/// the [GridTiles3DComponent] of [entity] — found again as the editor finds an
 /// entity rebuilt (`EditorSceneState.liveEntity`), whatever it is named.
 class GridTileStrokeCommand extends EditorCommand {
   GridTileStrokeCommand({
@@ -65,7 +65,7 @@ class GridTileStrokeCommand extends EditorCommand {
   /// Cell key to packed tile, or null for empty: before, and after.
   final Map<int, int?> before, after;
 
-  GridTiles3D? get _tiles => sceneState.liveEntity(entity)?.getComponent<GridTiles3D>();
+  GridTiles3DComponent? get _tiles => sceneState.liveEntity(entity)?.getComponent<GridTiles3DComponent>();
 
   void _apply(Map<int, int?> cells) {
     final tiles = _tiles;
@@ -166,10 +166,10 @@ class GridTileTool extends LevelToolHandler {
   /// its library; null for none yet.
   Entity? get target {
     final selected = designer.sceneState.selectedEntity.value;
-    final tiles = selected?.getComponent<GridTiles3D>();
+    final tiles = selected?.getComponent<GridTiles3DComponent>();
     if (tiles != null && tiles.library.isNotEmpty && tiles.library == library.value) return selected;
-    for (final e in designer.world.query([GridTiles3D])) {
-      if (e.getComponent<GridTiles3D>()!.library == library.value) return e;
+    for (final e in designer.world.query([GridTiles3DComponent])) {
+      if (e.getComponent<GridTiles3DComponent>()!.library == library.value) return e;
     }
     return null;
   }
@@ -178,7 +178,7 @@ class GridTileTool extends LevelToolHandler {
   /// their pieces' ids and their cells' size are that library's, never
   /// another's. A piece the library has not got becomes its first.
   void _followSelection() {
-    final tiles = designer.sceneState.selectedEntity.value?.getComponent<GridTiles3D>();
+    final tiles = designer.sceneState.selectedEntity.value?.getComponent<GridTiles3DComponent>();
     if (tiles != null && tiles.library.isNotEmpty && tiles.library != library.value) {
       library.value = tiles.library;
     }
@@ -214,7 +214,7 @@ class GridTileTool extends LevelToolHandler {
       if (hit.onto != null) {
         final normal = Vector3.copy(hit.normal)..normalize();
         final probe = hit.position + normal * (size * 0.5 * (inside ? -1 : 1));
-        return GridTiles3D.cellAt(local(probe), size);
+        return GridTiles3DComponent.cellAt(local(probe), size);
       }
       if (inside) return null;
     }
@@ -228,7 +228,7 @@ class GridTileTool extends LevelToolHandler {
     final t = (level - origin.y) / direction.y;
     if (t < 0) return null;
     final at = origin + direction * t;
-    final cell = GridTiles3D.cellAt(at, size);
+    final cell = GridTiles3DComponent.cellAt(at, size);
     return (x: cell.x, y: -storey - 1, z: cell.z);
   }
 
@@ -248,19 +248,19 @@ class GridTileTool extends LevelToolHandler {
   }
 
   /// The tiles painted into, made when there are none.
-  GridTiles3D _tilesFor() {
+  GridTiles3DComponent _tilesFor() {
     final existing = _target ?? target;
     if (existing != null) {
       _target = existing;
-      return existing.getComponent<GridTiles3D>()!;
+      return existing.getComponent<GridTiles3DComponent>()!;
     }
-    final tiles = GridTiles3D(library: library.value);
+    final tiles = GridTiles3DComponent(library: library.value);
     _target = designer.world.createEntityWithComponents(
       [
         TransformComponent(),
         tiles,
-        RigidBody3D(bodyType: BodyType3D.static),
-        Collider3D(shape: ColliderShape3D.matchShape),
+        RigidBody3DComponent(bodyType: Body3DType.static),
+        Collider3DComponent(shape: Collider3DShape.matchShape),
       ],
       name: designer.uniqueName('Tiles'),
     );
@@ -270,7 +270,7 @@ class GridTileTool extends LevelToolHandler {
 
   void _put(GridCell cell) {
     final tiles = _tilesFor();
-    final key = GridTiles3D.keyOf(cell.x, cell.y, cell.z);
+    final key = GridTiles3DComponent.keyOf(cell.x, cell.y, cell.z);
     _before.putIfAbsent(key, () => tiles.cells[key]);
     if (mode.value == GridTileMode.erase) {
       tiles.clearTile(cell.x, cell.y, cell.z);
@@ -370,12 +370,12 @@ class GridTileTool extends LevelToolHandler {
 
   void _commit(ToolContext context) {
     final target = _target;
-    final changed = {for (final MapEntry(:key, :value) in _before.entries) if (target?.getComponent<GridTiles3D>()?.cells[key] != value) key: value};
+    final changed = {for (final MapEntry(:key, :value) in _before.entries) if (target?.getComponent<GridTiles3DComponent>()?.cells[key] != value) key: value};
     _fillFrom = null;
     _last = null;
     _storey = null;
     if (target == null) return;
-    final tiles = target.getComponent<GridTiles3D>()!;
+    final tiles = target.getComponent<GridTiles3DComponent>()!;
     final verb = mode.value == GridTileMode.erase ? 'Erase' : (mode.value == GridTileMode.fill ? 'Fill' : 'Paint');
     if (_madeTarget) {
       adoptEntities(designer, [target], '$verb tiles');
@@ -399,7 +399,7 @@ class GridTileTool extends LevelToolHandler {
 
   /// Takes the piece under the pointer up: its item and turn.
   void _pick(SpaceContext space, MeshLibrary loaded, ToolContext context) {
-    final tiles = (target)?.getComponent<GridTiles3D>();
+    final tiles = (target)?.getComponent<GridTiles3DComponent>();
     final cell = _cellAt(space, loaded, inside: true);
     final tile = cell == null ? null : tiles?.tileAt(cell.x, cell.y, cell.z);
     if (tile == null) {
@@ -443,7 +443,7 @@ class GridTileTool extends LevelToolHandler {
   void _cancelStroke() {
     final target = _target;
     if (target != null) {
-      final tiles = target.getComponent<GridTiles3D>()!;
+      final tiles = target.getComponent<GridTiles3DComponent>()!;
       if (_madeTarget) {
         designer.world.destroyEntity(target);
       } else {

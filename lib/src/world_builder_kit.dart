@@ -1,18 +1,18 @@
-import 'package:just_game_engine/graphics_3d.dart' show RenderProviders;
+import 'package:just_game_engine/just_game_engine_3d.dart' show ContextRenderProviders;
 import 'package:just_game_engine/just_game_engine.dart';
 
 import 'splines/path_follower_system.dart';
 import 'splines/spline_render.dart';
-import 'splines/spline_schemas.dart';
+import 'splines/spline_definitions.dart';
 import 'scatter/scatter_render.dart';
-import 'scatter/scatter_schemas.dart';
-import 'terrain/terrain_component.dart';
+import 'scatter/scatter_definitions.dart';
+import 'terrain/terrain_3d_component.dart';
 import 'terrain/terrain_render.dart';
-import 'terrain/terrain_schemas.dart';
+import 'terrain/terrain_definitions.dart';
 import 'tiles/grid_render.dart';
 import 'tiles/grid_tiles.dart';
 import 'tiles/mesh_library.dart';
-import 'tiles/tile_schemas.dart';
+import 'tiles/tile_definitions.dart';
 
 /// The world builder kit's front door.
 ///
@@ -37,31 +37,47 @@ abstract final class WorldBuilderKit {
   static const String id = 'just_world_builder_kit';
 
   /// Every component the kit saves.
-  static List<ComponentSchema> get schemas => [
-    ...SplineSchemas.all,
-    ...TileSchemas.all,
-    ...TerrainSchemas.all,
-    ...ScatterSchemas.all,
+  static List<ComponentDefinition> get definitions => [
+    ...SplineDefinitions.all,
+    ...TileDefinitions.all,
+    ...TerrainDefinitions.all,
+    ...ScatterDefinitions.all,
   ];
 
   /// The field types the kit's components save through.
   static List<FieldType> get fieldTypes => [
-    SplineSchemas.splinePoints,
-    TileSchemas.gridCells,
-    ScatterSchemas.layersType,
-    ScatterSchemas.instancesType,
+    SplineDefinitions.splinePoints,
+    TileDefinitions.gridCells,
+    ScatterDefinitions.layersType,
+    ScatterDefinitions.instancesType,
   ];
 
   /// What [extension] does, for a context of your own.
   static void install(EngineContext context) {
+    // Its levels use the engine's own components too.
+    context.install(BuiltInComponents.extension);
     context.fieldTypes.registerAll(fieldTypes);
-    context.definitions.registerAll(schemas, ifAbsent: true);
+    context.definitions.registerAll(definitions, ifAbsent: true);
+    context.migrations.renamedTypes.addAll(renamedTypes);
     registerRenderers(context);
   }
 
+  /// The kit's components renamed in scene format 11, when every
+  /// component's name came to end in `Component`: old name → new. Levels
+  /// saved before are brought forward as they load.
+  static const Map<String, String> renamedTypes = {
+    'Scatter3D': 'Scatter3DComponent',
+    'Spline3D': 'Spline3DComponent',
+    'SplineSweep3D': 'SplineSweep3DComponent',
+    'SplineInstances3D': 'SplineInstances3DComponent',
+    'PathFollower3D': 'PathFollower3DComponent',
+    'Terrain3D': 'Terrain3DComponent',
+    'GridTiles3D': 'GridTiles3DComponent',
+  };
+
   /// What draws the kit's pieces in 3-D.
   static void registerRenderers(EngineContext context) {
-    RenderProviders.of(context)
+    context.renderProviders
       ..register(SweepRenderProvider())
       ..register(InstancesRenderProvider())
       ..register(GridTilesRenderProvider(context))
@@ -79,8 +95,8 @@ abstract final class WorldBuilderKit {
     }
   }
 
-  /// The files [world]'s pieces read — each `Terrain3D`'s `.jterrain`,
-  /// each `GridTiles3D`'s mesh library — read, and the pieces tied to
+  /// The files [world]'s pieces read — each `Terrain3DComponent`'s `.jterrain`,
+  /// each `GridTiles3DComponent`'s mesh library — read, and the pieces tied to
   /// them; the files no piece of [world] uses any more let go (changes not
   /// yet written are kept).
   ///
@@ -90,8 +106,8 @@ abstract final class WorldBuilderKit {
   /// until they arrive. A file that cannot be read leaves its piece empty
   /// and says why (`TerrainFiles.errorOf`, `MeshLibraries.errorOf`).
   static Future<void> ready(World world) async {
-    final terrains = [for (final e in world.query([Terrain3D])) e.getComponent<Terrain3D>()!];
-    final grids = [for (final e in world.query([GridTiles3D])) e.getComponent<GridTiles3D>()!];
+    final terrains = [for (final e in world.query([Terrain3DComponent])) e.getComponent<Terrain3DComponent>()!];
+    final grids = [for (final e in world.query([GridTiles3DComponent])) e.getComponent<GridTiles3DComponent>()!];
     final files = TerrainFiles.of(world.context);
     final libraries = MeshLibraries.of(world.context);
     files.releaseUnused([for (final t in terrains) t.data]);
@@ -121,7 +137,7 @@ final class _WorldBuilderKitExtension implements RefreshableExtension {
   @override
   void refresh(EngineContext context) {
     context.fieldTypes.registerAll(WorldBuilderKit.fieldTypes, override: true);
-    context.definitions.refresh(WorldBuilderKit.schemas);
+    context.definitions.refresh(WorldBuilderKit.definitions);
     WorldBuilderKit.registerRenderers(context);
   }
 }

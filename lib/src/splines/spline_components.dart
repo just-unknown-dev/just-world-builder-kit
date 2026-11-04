@@ -5,7 +5,7 @@ import 'package:just_game_engine/just_game_engine.dart';
 
 import 'spline_sweep.dart';
 
-/// How a [Spline3D] runs between its points.
+/// How a [Spline3DComponent] runs between its points.
 enum SplineInterpolation {
   /// Smoothly through every point, its tangents worked out from its
   /// neighbours.
@@ -30,7 +30,7 @@ enum SplineTangentMode {
   free,
 }
 
-/// One point of a [Spline3D], in its entity's own space: where it is, its
+/// One point of a [Spline3DComponent], in its entity's own space: where it is, its
 /// handles (relative to it, for [SplineInterpolation.bezier]), and how far
 /// what is laid along the spline is rolled about it there.
 final class SplinePoint {
@@ -108,10 +108,10 @@ final class SplinePoint {
 
 /// A path through space — a road's line, a rail's, the way a platform
 /// goes — of [points] in its entity's own space. What is laid along it
-/// ([SplineSweep3D], [SplineInstances3D]) and what follows it
-/// ([PathFollower3D]) read it.
-class Spline3D extends Component {
-  Spline3D({List<SplinePoint>? points, this.closed = false, this.interpolation = SplineInterpolation.catmullRom})
+/// ([SplineSweep3DComponent], [SplineInstances3DComponent]) and what follows it
+/// ([PathFollower3DComponent]) read it.
+class Spline3DComponent extends Component {
+  Spline3DComponent({List<SplinePoint>? points, this.closed = false, this.interpolation = SplineInterpolation.catmullRom})
     : points = points ?? [];
 
   List<SplinePoint> points;
@@ -133,29 +133,29 @@ class Spline3D extends Component {
   }
 }
 
-/// A cross-section a [SplineSweep3D] sweeps along its spline.
+/// A cross-section a [SplineSweep3DComponent] sweeps along its spline.
 enum SweepProfile {
-  /// A flat deck to walk on: [SplineSweep3D.width] across,
-  /// [SplineSweep3D.height] thick, its top on the spline.
+  /// A flat deck to walk on: [SplineSweep3DComponent.width] across,
+  /// [SplineSweep3DComponent.height] thick, its top on the spline.
   road,
 
-  /// A wall standing on the spline: [SplineSweep3D.width] thick,
-  /// [SplineSweep3D.height] high.
+  /// A wall standing on the spline: [SplineSweep3DComponent.width] thick,
+  /// [SplineSweep3DComponent.height] high.
   wall,
 
-  /// A tube round the spline, [SplineSweep3D.radius] across.
+  /// A tube round the spline, [SplineSweep3DComponent.radius] across.
   pipe,
 
-  /// A bar along the spline: [SplineSweep3D.width] by
-  /// [SplineSweep3D.height], standing on it.
+  /// A bar along the spline: [SplineSweep3DComponent.width] by
+  /// [SplineSweep3DComponent.height], standing on it.
   rail,
 }
 
-/// A solid swept along its entity's [Spline3D]: a road, a wall, a pipe, a
+/// A solid swept along its entity's [Spline3DComponent]: a road, a wall, a pipe, a
 /// rail. Drawn by the kit's renderer; solid — for what stands still, or is
-/// moved by hand — through a `Collider3D` set to match its shape.
-class SplineSweep3D extends Component implements SolidShapeSource {
-  SplineSweep3D({
+/// moved by hand — through a `Collider3DComponent` set to match its shape.
+class SplineSweep3DComponent extends Component implements SolidShapeSource {
+  SplineSweep3DComponent({
     this.profile = SweepProfile.road,
     this.width = 3,
     this.height = 0.3,
@@ -199,7 +199,7 @@ class SplineSweep3D extends Component implements SolidShapeSource {
 
   /// The spline it was last swept along (its entity's, linked by whoever
   /// draws or collides it): runtime only.
-  Spline3D? spline;
+  Spline3DComponent? spline;
 
   /// Runtime: the mesh the last sweep made ([SplineSweeper.meshFor]), and
   /// the [sweepKey] it was made for. Never saved.
@@ -254,11 +254,11 @@ final class SweptMesh {
   int get triangleCount => indices.length ~/ 3;
 }
 
-/// Copies of a model laid along its entity's [Spline3D] — fence posts,
+/// Copies of a model laid along its entity's [Spline3DComponent] — fence posts,
 /// lamps, trees by a road — [spacing] apart, drawn in one go. The editor
 /// can make them entities of their own.
-class SplineInstances3D extends Component {
-  SplineInstances3D({
+class SplineInstances3DComponent extends Component {
+  SplineInstances3DComponent({
     this.model = '',
     this.spacing = 2,
     this.startAt = 0,
@@ -295,13 +295,13 @@ class SplineInstances3D extends Component {
 
   /// The spline they were last laid along (their entity's, linked by
   /// whoever draws them): runtime only.
-  Spline3D? spline;
+  Spline3DComponent? spline;
 
   /// Equal while where they go stays the same.
   Object get layoutKey => Object.hash(spacing, startAt, sideOffset, alignToPath, scale, spline?.shapeKey);
 }
 
-/// How a [PathFollower3D] goes along its spline.
+/// How a [PathFollower3DComponent] goes along its spline.
 enum FollowMode {
   /// To the end, then round again from the start. On a spline that does
   /// not close, that is a jump back to its start, and a kinematic body's
@@ -319,8 +319,8 @@ enum FollowMode {
 /// Moves its entity along a spline — a platform's route, a train's track:
 /// [speed] metres a second, pausing [wait] seconds at each end. A
 /// kinematic body is carried along, and characters standing on it with it.
-class PathFollower3D extends Component {
-  PathFollower3D({
+class PathFollower3DComponent extends Component {
+  PathFollower3DComponent({
     EntityTarget? path,
     this.speed = 2,
     this.mode = FollowMode.pingPong,
@@ -329,7 +329,7 @@ class PathFollower3D extends Component {
     this.faceAlong = false,
   }) : path = path ?? EntityTarget.none;
 
-  /// The entity whose [Spline3D] it follows.
+  /// The entity whose [Spline3DComponent] it follows.
   EntityTarget path;
 
   double speed;

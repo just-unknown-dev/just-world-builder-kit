@@ -4,20 +4,20 @@ import 'package:just_game_engine/just_game_engine.dart';
 
 import 'scatter_components.dart';
 
-/// How [Scatter3D] is saved, loaded and shown, in the group "World
+/// How [Scatter3DComponent] is saved, loaded and shown, in the group "World
 /// Builder".
-abstract final class ScatterSchemas {
+abstract final class ScatterDefinitions {
   static const ScatterLayersFieldType layersType = ScatterLayersFieldType();
   static const ScatterInstancesFieldType instancesType = ScatterInstancesFieldType();
 
   /// Every one.
-  static List<ComponentSchema> get all => [scatter];
+  static List<ComponentDefinition> get all => [scatter];
 
-  /// [Scatter3D].
-  static ComponentSchema<Scatter3D> get scatter => ComponentSchema<Scatter3D>(
-    type: 'Scatter3D',
+  /// [Scatter3DComponent].
+  static ComponentDefinition<Scatter3DComponent> get scatter => ComponentDefinition<Scatter3DComponent>(
+    type: 'Scatter3DComponent',
     id: 'scatter_3d_a91f0d64',
-    create: Scatter3D.new,
+    create: Scatter3DComponent.new,
     extent: const _ScatterExtent(),
     hints: const ComponentHints(
       dimensions: Dimensions.threeD,
@@ -34,44 +34,44 @@ abstract final class ScatterSchemas {
       },
     ),
     fields: [
-      SchemaField(
+      FieldDefinition(
         name: 'layers',
         kind: layersType,
-        read: (c) => [for (final l in (c as Scatter3D).layers) l.copy()],
+        read: (c) => [for (final l in (c as Scatter3DComponent).layers) l.copy()],
         write: (c, v) {
-          final s = c as Scatter3D;
+          final s = c as Scatter3DComponent;
           s
             ..layers = [for (final l in (v as List?) ?? const []) l is ScatterLayer ? l.copy() : ScatterLayer.fromJson(l)]
             ..revision += 1;
         },
       ),
-      SchemaField(
+      FieldDefinition(
         name: 'instances',
         kind: instancesType,
-        read: (c) => List<ScatterInstance>.of((c as Scatter3D).instances),
+        read: (c) => List<ScatterInstance>.of((c as Scatter3DComponent).instances),
         write: (c, v) {
-          final s = c as Scatter3D;
+          final s = c as Scatter3DComponent;
           s
             ..instances = List<ScatterInstance>.of((v as List?)?.cast<ScatterInstance>() ?? const [])
             ..revision += 1;
         },
       ),
-      SchemaField(
+      FieldDefinition(
         name: 'cellSize',
         kind: FieldTypes.decimal,
-        read: (c) => (c as Scatter3D).cellSize,
+        read: (c) => (c as Scatter3DComponent).cellSize,
         write: (c, v) {
-          final s = c as Scatter3D;
+          final s = c as Scatter3DComponent;
           s
             ..cellSize = (v as num).toDouble().clamp(4.0, 512.0)
             ..revision += 1;
         },
       ),
-      SchemaField(
+      FieldDefinition(
         name: 'castShadows',
         kind: FieldTypes.boolean,
-        read: (c) => (c as Scatter3D).castShadows,
-        write: (c, v) => (c as Scatter3D).castShadows = v as bool,
+        read: (c) => (c as Scatter3DComponent).castShadows,
+        write: (c, v) => (c as Scatter3DComponent).castShadows = v as bool,
       ),
     ],
   );
@@ -90,7 +90,7 @@ final class _ScatterExtent extends ComponentExtent {
 
   @override
   bool boundsInto(Component component, Aabb3 out) {
-    final s = component as Scatter3D;
+    final s = component as Scatter3DComponent;
     if (s.instances.isEmpty) return false;
     out.setEmpty();
     for (final i in s.instances) {

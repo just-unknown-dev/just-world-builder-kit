@@ -254,7 +254,7 @@ class GridTilePreviewOverlay extends DesignerOverlay {
   }
 }
 
-/// The inspector's row for a [GridTiles3D]'s cells: how many.
+/// The inspector's row for a [GridTiles3DComponent]'s cells: how many.
 Widget gridCellsEditor(FieldEditorContext context) {
   final cells = context.value is Map ? (context.value! as Map).length : 0;
   return ReadonlyRow(label: context.hint.label ?? 'Tiles', value: '$cells tile${cells == 1 ? '' : 's'} — paint with the Tiles tool');

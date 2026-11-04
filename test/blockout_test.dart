@@ -7,9 +7,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
-import 'package:just_game_engine/physics_3d.dart';
 import 'package:just_game_engine_editor/just_game_engine_editor.dart';
 import 'package:just_world_builder_kit/editor.dart';
 import 'package:just_world_builder_kit/just_world_builder_kit.dart';
@@ -56,9 +55,9 @@ void main() {
 
     setUp(() {
       final world = World()..initialize();
-      Graphics3D.registerSchemas(world.context);
+      Graphics3D.registerDefinitions(world.context);
       // As a 3-D game's editor has them: bodies and colliders saved.
-      Physics3D.registerSchemas(world.context);
+      Physics3D.registerDefinitions(world.context);
       scope = EditorScope(
         world: world,
         modules: [WorldBuilderModule()],
@@ -68,7 +67,7 @@ void main() {
       scope.sceneState.openScene(EditorScene(name: 'level', mode: SceneMode.threeD));
       // World Builder chosen in the designer's switch.
       scope.selectDesigner('world_builder');
-      view = OrbitFlyEditorView.of(Camera(viewportSize: const Size(400, 400)))
+      view = OrbitFlyEditorView.of(OutputCamera(viewportSize: const Size(400, 400)))
         ..viewportSize = const Size(400, 400)
         ..pivot.setValues(0, 0, 0)
         ..distance = 20
@@ -94,7 +93,7 @@ void main() {
     void release(Vector3 p) => session.onPointerUp(Offset.zero, 32, screen: at(p), canvasSize: const Size(400, 400));
     void hover(Vector3 p) => session.onPointerHover(Offset.zero, 32, screen: at(p), canvasSize: const Size(400, 400));
 
-    Entity only<T extends Primitive3D>() => scope.world.entities.singleWhere((e) => e.getComponent<Primitive3D>() is T);
+    Entity only<T extends Primitive3DComponent>() => scope.world.entities.singleWhere((e) => e.getComponent<Primitive3DComponent>() is T);
     Vector3 position(Entity e) => e.getComponent<TransformComponent>()!.position;
 
     test('the tools are the kit\'s, in 3-D', () {
@@ -107,7 +106,7 @@ void main() {
       session.setTool(BlockTool.toolId);
       press(Vector3(3, 0, 2));
       release(Vector3(3, 0, 2));
-      final block = only<Cube3D>();
+      final block = only<Cube3DComponent>();
       final p = position(block);
       expect([p.x, p.y, p.z], [closeTo(3, 1e-6), closeTo(-0.5, 1e-6), closeTo(2, 1e-6)]);
       expect(scope.history.undoEntries, hasLength(1));
@@ -118,14 +117,14 @@ void main() {
       press(Vector3(0, 0, 0));
       move(Vector3(2, 0, 3));
       release(Vector3(2, 0, 3));
-      expect(scope.world.entities.where((e) => e.hasComponent<Primitive3D>()), isEmpty, reason: 'its height next');
+      expect(scope.world.entities.where((e) => e.hasComponent<Primitive3DComponent>()), isEmpty, reason: 'its height next');
       hover(Vector3(2, -1.5, 3));
       final preview = (session.tools.byId(BlockTool.toolId)! as BlockTool).preview.value!;
       expect(preview.box!.min.y, closeTo(-1.5, 1e-3));
       press(Vector3(2, -1.5, 3));
-      final box = only<Cube3D>().getComponent<Primitive3D>()! as Cube3D;
+      final box = only<Cube3DComponent>().getComponent<Primitive3DComponent>()! as Cube3DComponent;
       expect([box.width, box.height, box.depth], [closeTo(2, 1e-3), closeTo(1.5, 1e-3), closeTo(3, 1e-3)]);
-      final p = position(only<Cube3D>());
+      final p = position(only<Cube3DComponent>());
       expect([p.x, p.y, p.z], [closeTo(1, 1e-3), closeTo(-0.75, 1e-3), closeTo(1.5, 1e-3)]);
     });
 
@@ -136,8 +135,8 @@ void main() {
         release(p);
       }
       expect(session.handleKey(LogicalKeyboardKey.enter, gridSize: 32), isTrue);
-      final floor = only<Polygon3D>();
-      final polygon = floor.getComponent<Primitive3D>()! as Polygon3D;
+      final floor = only<Polygon3DComponent>();
+      final polygon = floor.getComponent<Primitive3DComponent>()! as Polygon3DComponent;
       expect(polygon.points, hasLength(4));
       final p = position(floor);
       expect([p.x, p.z], [closeTo(2, 1e-6), closeTo(1, 1e-6)]);
@@ -147,15 +146,15 @@ void main() {
     test('a ramp dragged from its foot to a ledge: risen that far, facing it', () {
       final ledge = scope.world.createEntityWithComponents([
         TransformComponent(position: Vector3(0, -1, 6)),
-        Cube3D(width: 4, height: 2, depth: 4),
+        Cube3DComponent(width: 4, height: 2, depth: 4),
       ], name: 'Ledge');
       scope.sceneState.registerEntity(ledge);
       session.setTool(RampTool.toolId);
       press(Vector3(0, 0, 0));
       move(Vector3(0, -2, 4.5));
       release(Vector3(0, -2, 4.5));
-      final ramp = only<Ramp3D>();
-      final shape = ramp.getComponent<Primitive3D>()! as Ramp3D;
+      final ramp = only<Ramp3DComponent>();
+      final shape = ramp.getComponent<Primitive3DComponent>()! as Ramp3DComponent;
       expect([shape.height, shape.depth], [closeTo(2, 1e-3), closeTo(4.5, 1e-3)]);
       final q = Quaternion.identity();
       ramp.getComponent<TransformComponent>()!.rotationInto(q);
@@ -169,14 +168,14 @@ void main() {
       press(Vector3(1, -2, 4.5));
       move(Vector3(math.sqrt(2) * 3 + 1, 0, 4.5));
       release(Vector3(math.sqrt(2) * 3 + 1, 0, 4.5));
-      final stairs = only<Stairs3D>().getComponent<Primitive3D>()! as Stairs3D;
+      final stairs = only<Stairs3DComponent>().getComponent<Primitive3DComponent>()! as Stairs3DComponent;
       expect(stairs.steps, 10, reason: '2 m of 20 cm steps');
     });
 
     test('every piece is solid, as the engine\'s Solid shapes are: a static body matching its shape', () {
       final ledge = scope.world.createEntityWithComponents([
         TransformComponent(position: Vector3(0, -1, 6)),
-        Cube3D(width: 4, height: 2, depth: 4),
+        Cube3DComponent(width: 4, height: 2, depth: 4),
       ], name: 'Ledge');
       scope.sceneState.registerEntity(ledge);
       session.setTool(BlockTool.toolId);
@@ -194,18 +193,18 @@ void main() {
       release(Vector3(0, -2, 4.5));
       final made = [
         for (final e in scope.world.entities)
-          if (e.hasComponent<Primitive3D>() && !identical(e, ledge)) e,
+          if (e.hasComponent<Primitive3DComponent>() && !identical(e, ledge)) e,
       ];
-      expect(made.map((e) => e.getComponent<Primitive3D>().runtimeType).toSet(), {Cube3D, Polygon3D, Ramp3D});
+      expect(made.map((e) => e.getComponent<Primitive3DComponent>().runtimeType).toSet(), {Cube3DComponent, Polygon3DComponent, Ramp3DComponent});
       for (final e in made) {
-        expect(e.getComponent<RigidBody3D>()?.bodyType, BodyType3D.static, reason: e.name);
-        expect(e.getComponent<Collider3D>()?.shape, ColliderShape3D.matchShape, reason: e.name);
+        expect(e.getComponent<RigidBody3DComponent>()?.bodyType, Body3DType.static, reason: e.name);
+        expect(e.getComponent<Collider3DComponent>()?.shape, Collider3DShape.matchShape, reason: e.name);
       }
       // Undone and redone with them.
       expect(scope.history.undoEntries, hasLength(3));
       scope.history.undo();
       scope.history.redo();
-      expect(only<Ramp3D>().getComponent<Collider3D>(), isNotNull);
+      expect(only<Ramp3DComponent>().getComponent<Collider3DComponent>(), isNotNull);
     });
   });
 }

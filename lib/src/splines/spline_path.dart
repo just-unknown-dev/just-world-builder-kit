@@ -9,7 +9,7 @@ import 'spline_components.dart';
 /// unit length, square to each other.
 typedef SplineFrame = ({Vector3 position, Vector3 tangent, Vector3 up, Vector3 right});
 
-/// A [Spline3D] sampled finely along its length, in its entity's own
+/// A [Spline3DComponent] sampled finely along its length, in its entity's own
 /// space: where it is at any distance along it, which way it runs, which
 /// way is up on it — frames that turn as little as they can (rotation
 /// minimising), then rolled as its points say — and the point on it
@@ -20,7 +20,7 @@ final class SplinePath {
   SplinePath._(this.positions, this.tangents, this.ups, this.distances, this.closed);
 
   /// [spline] sampled [perSegment] times between each two of its points.
-  factory SplinePath.of(Spline3D spline, {int perSegment = 24}) {
+  factory SplinePath.of(Spline3DComponent spline, {int perSegment = 24}) {
     final points = _distinct(spline.points, spline.closed);
     final n = points.length;
     if (n < 2) {

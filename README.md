@@ -8,15 +8,15 @@ draws them, what makes them solid and the files they keep.
 | Piece | Component | Drawn | Solid |
 | --- | --- | --- | --- |
 | Blockout | the engine's 3-D shapes | as shapes | as shapes |
-| Splines | `Spline3D`, `SplineSweep3D`, `SplineInstances3D`, `PathFollower3D` | a swept mesh; copies in one batch | the swept mesh |
-| Grid tiles | `GridTiles3D` + a mesh library (`.meshlib.json`) | batches per piece and block of cells | boxes merged along rows, or each piece's shape |
-| Terrain | `Terrain3D` + a `.jterrain` file | in chunks, rebuilt only where it changed | a height field, holes and all |
-| Scatter | `Scatter3D` | batches per layer and square, not drawn far off | opt-in boxes or capsules per layer |
+| Splines | `Spline3DComponent`, `SplineSweep3DComponent`, `SplineInstances3DComponent`, `PathFollower3DComponent` | a swept mesh; copies in one batch | the swept mesh |
+| Grid tiles | `GridTiles3DComponent` + a mesh library (`.meshlib.json`) | batches per piece and block of cells | boxes merged along rows, or each piece's shape |
+| Terrain | `Terrain3DComponent` + a `.jterrain` file | in chunks, rebuilt only where it changed | a height field, holes and all |
+| Scatter | `Scatter3DComponent` | batches per layer and square, not drawn far off | opt-in boxes or capsules per layer |
 
-What is solid is solid through a `Collider3D` set to **Match shape** on a
+What is solid is solid through a `Collider3DComponent` set to **Match shape** on a
 static body (a platform on a route: a kinematic one); the editor's tools add
 both. Scatter layers are solid only where they say so, and copies along a
-spline (`SplineInstances3D`) are only drawn. +Y is down in the engine:
+spline (`SplineInstances3DComponent`) are only drawn. +Y is down in the engine:
 heights are measured up, towards −Y.
 
 ## The pieces
@@ -25,11 +25,11 @@ heights are measured up, towards −Y.
   outline a floor, drag a ramp or a flight of stairs from its foot to its
   top. Blockout makes the engine's own 3-D shapes, so a blocked-out level
   plays at once and can be dressed later.
-- **Splines.** A `Spline3D` is a path of points (Catmull–Rom, Bézier or
+- **Splines.** A `Spline3DComponent` is a path of points (Catmull–Rom, Bézier or
   straight; open or closed; each point with a roll). Lay a road, a wall, a
-  pipe or a rail along it (`SplineSweep3D`), copies of a model every few
-  metres (`SplineInstances3D`, which the editor can bake into entities), or
-  move an entity along it with `PathFollower3D` — loop, back and forth, or
+  pipe or a rail along it (`SplineSweep3DComponent`), copies of a model every few
+  metres (`SplineInstances3DComponent`, which the editor can bake into entities), or
+  move an entity along it with `PathFollower3DComponent` — loop, back and forth, or
   once, resting at the ends. A kinematic body on a route carries whoever
   stands on it. Looping an open spline jumps back to its start, and that
   jump flings whoever rides it: give a ridden loop a closed spline, or go
@@ -38,14 +38,14 @@ heights are measured up, towards −Y.
   engine's shapes — sized to its cells, each solid as its cell, as its own
   shape, or not at all (a new library's floors and walls are solid as their
   slabs). A piece's number is never given to another, so tiles of a piece
-  taken out stay empty. A `GridTiles3D` holds which piece is in each cell
+  taken out stay empty. A `GridTiles3DComponent` holds which piece is in each cell
   and how it is turned (any of the 24 quarter turns of a cube), packed small
   in the scene.
-- **Terrain.** A `Terrain3D` is ground shaped by hand: heights, four layers'
+- **Terrain.** A `Terrain3DComponent` is ground shaped by hand: heights, four layers'
   weights and holes, kept in a `.jterrain` file beside the scene. It shows the
   four layers of a layered material file, or four colours. Its collision is
   rebuilt when a stroke ends, not at every dab.
-- **Scatter.** A `Scatter3D` holds layers — grass, rocks, trees, each a
+- **Scatter.** A `Scatter3DComponent` holds layers — grass, rocks, trees, each a
   model or one of the engine's shapes in its colour — and the pieces
   painted of each, kept a layer's spacing apart.
 
@@ -58,8 +58,7 @@ kit):
 ```dart
 final engine = Engine(config: EngineConfig(
   extensions: [WorldBuilderKit.extension],
-  graphics3D: Graphics3D(),
-  physics3D: Physics3D(),
+  services: [Graphics3D(), Physics3D()],
 ));
 await engine.initialize();
 WorldBuilderKit.registerSystems(engine.world);

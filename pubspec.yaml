@@ -14,7 +14,10 @@ dependencies:
     sdk: flutter
   # The engine: the 3-D shapes blockout makes, and what the kit's own
   # pieces (splines, terrain, tiles, scatter) draw and collide with.
-  just_game_engine: ^2.0.0-dev.2
+  just_game_engine: ^2.0.0-dev.4
+  # The scene format's component renames, which the mesh library's own
+  # older files follow.
+  just_game_engine_formats: ^0.3.0
   # Grid tiles' cells, packed small in the scene file.
   just_deflate: ^0.1.0
   # The tools' settings, as the editor's own widgets watch them.
@@ -32,6 +35,9 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   # The tests drive the tools through a real Level Designer session.
   just_game_engine_editor: ^0.1.0-dev.1
+  # The tests draw with the renderer's own test doubles and views, which
+  # the engine's 3-D library leaves out.
+  just_graphics_engine: ^0.1.0-dev.2
 
 flutter:
   uses-material-design: true

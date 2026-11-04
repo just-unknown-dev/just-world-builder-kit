@@ -3,9 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:just_editor_core/just_editor_core.dart';
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
-import 'package:just_game_engine/physics_3d.dart';
 import 'package:just_signals/just_signals.dart';
 
 import '../splines/spline_components.dart';
@@ -17,7 +16,7 @@ const String splineGroup = 'worldBuilder.splines';
 
 /// What the Spline tool makes of the points clicked.
 enum SplineMake {
-  /// A spline alone: a route for a [PathFollower3D].
+  /// A spline alone: a route for a [PathFollower3DComponent].
   path('Path', Icons.gesture),
 
   /// A road along it, solid.
@@ -162,7 +161,7 @@ class SplineTool extends LevelToolHandler {
       preview.value = null;
       return;
     }
-    final spline = Spline3D(
+    final spline = Spline3DComponent(
       points: [for (final p in [..._points, ?_hover]) SplinePoint(position: p)],
       interpolation: smooth.value ? SplineInterpolation.catmullRom : SplineInterpolation.linear,
       closed: closed.value,
@@ -236,7 +235,7 @@ class SplineTool extends LevelToolHandler {
     );
     _reset();
     adoptEntities(designer, made, 'Draw a ${kind.label.toLowerCase()}');
-    final length = SplinePath.of(made.first.getComponent<Spline3D>()!).length;
+    final length = SplinePath.of(made.first.getComponent<Spline3DComponent>()!).length;
     context.controller.setStatus('${kind.label}: ${length.toStringAsFixed(1)} m');
   }
 
@@ -260,15 +259,15 @@ class SplineTool extends LevelToolHandler {
       _ => 0.0,
     };
     final origin = Vector3.copy(points.first)..y -= lift;
-    final spline = Spline3D(
+    final spline = Spline3DComponent(
       points: [for (final p in points) SplinePoint(position: Vector3(p.x - origin.x, p.y - lift - origin.y, p.z - origin.z))],
       closed: closed,
       interpolation: smooth ? SplineInterpolation.catmullRom : SplineInterpolation.linear,
     );
-    List<Component> solid(SplineSweep3D sweep) => [
+    List<Component> solid(SplineSweep3DComponent sweep) => [
       sweep,
-      RigidBody3D(bodyType: BodyType3D.static),
-      Collider3D(shape: ColliderShape3D.matchShape),
+      RigidBody3DComponent(bodyType: Body3DType.static),
+      Collider3DComponent(shape: Collider3DShape.matchShape),
     ];
     final name = designer.uniqueName(switch (kind) {
       SplineMake.path || SplineMake.route => 'Path',
@@ -279,11 +278,11 @@ class SplineTool extends LevelToolHandler {
       spline,
       ...switch (kind) {
         SplineMake.path || SplineMake.route => const <Component>[],
-        SplineMake.road => solid(SplineSweep3D(profile: SweepProfile.road, width: 3, height: 0.3)),
-        SplineMake.wall => solid(SplineSweep3D(profile: SweepProfile.wall, width: 0.3, height: 2.5)),
-        SplineMake.pipe => solid(SplineSweep3D(profile: SweepProfile.pipe, radius: pipeRadius)),
-        SplineMake.rail => solid(SplineSweep3D(profile: SweepProfile.rail, width: 0.2, height: 0.2, color: const Color(0xFF8D6E63))),
-        SplineMake.fence => [SplineInstances3D(spacing: 2, scale: 0.3)],
+        SplineMake.road => solid(SplineSweep3DComponent(profile: SweepProfile.road, width: 3, height: 0.3)),
+        SplineMake.wall => solid(SplineSweep3DComponent(profile: SweepProfile.wall, width: 0.3, height: 2.5)),
+        SplineMake.pipe => solid(SplineSweep3DComponent(profile: SweepProfile.pipe, radius: pipeRadius)),
+        SplineMake.rail => solid(SplineSweep3DComponent(profile: SweepProfile.rail, width: 0.2, height: 0.2, color: const Color(0xFF8D6E63))),
+        SplineMake.fence => [SplineInstances3DComponent(spacing: 2, scale: 0.3)],
       },
     ];
     final made = [designer.world.createEntityWithComponents(pieces, name: name)];
@@ -293,10 +292,10 @@ class SplineTool extends LevelToolHandler {
         designer.world.createEntityWithComponents(
           [
             TransformComponent(position: Vector3.copy(origin)),
-            Cube3D(width: 3, height: platformThickness, depth: 3),
-            RigidBody3D(bodyType: BodyType3D.kinematic),
-            Collider3D(shape: ColliderShape3D.matchShape),
-            PathFollower3D(path: EntityTarget.name(name)),
+            Cube3DComponent(width: 3, height: platformThickness, depth: 3),
+            RigidBody3DComponent(bodyType: Body3DType.kinematic),
+            Collider3DComponent(shape: Collider3DShape.matchShape),
+            PathFollower3DComponent(path: EntityTarget.name(name)),
           ],
           name: designer.uniqueName('Platform'),
         ),

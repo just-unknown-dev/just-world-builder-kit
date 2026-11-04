@@ -8,13 +8,13 @@ import 'terrain_data.dart';
 /// Ground to walk on, shaped by hand: hills, valleys, paths painted in,
 /// holes cut — [size] metres a side about its entity, its heights and
 /// layers kept in a `.jterrain` file ([data]) beside the scene. Drawn by
-/// the kit's renderer in chunks; solid, through a `Collider3D` set to
+/// the kit's renderer in chunks; solid, through a `Collider3DComponent` set to
 /// match its shape, as a height field.
 ///
 /// Up to four layers show: the four colour layers of a layered material
 /// file ([material]), or else [colors].
-class Terrain3D extends Component implements SolidShapeSource {
-  Terrain3D({
+class Terrain3DComponent extends Component implements SolidShapeSource {
+  Terrain3DComponent({
     this.data = '',
     this.size = 64,
     this.resolution = 129,

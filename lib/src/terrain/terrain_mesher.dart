@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' show Color;
 
-import 'package:just_game_engine/graphics_3d.dart';
+import 'package:just_game_engine/just_game_engine_3d.dart';
 
 import 'terrain_data.dart';
 
@@ -44,7 +44,7 @@ abstract final class TerrainMesher {
     final w = i1 - i0 + 1, d = j1 - j0 + 1;
     final vertices = Float32List(w * d * kVertexFloats);
     final bounds = Aabb3();
-    final mixed = colors == null ? null : [for (final c in colors) GraphicsShapes.linear(c)];
+    final mixed = colors == null ? null : [for (final c in colors) LinearColor.of(c)];
     for (var j = j0; j <= j1; j++) {
       for (var i = i0; i <= i1; i++) {
         final o = ((j - j0) * w + (i - i0)) * kVertexFloats;
