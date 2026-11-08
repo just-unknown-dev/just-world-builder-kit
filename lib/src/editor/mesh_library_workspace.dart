@@ -5,17 +5,21 @@ import 'package:just_editor_core/just_editor_core.dart';
 import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
-import '../tiles/mesh_library.dart';
+import '../tiles/tiles.dart';
+import 'world_builder_files.dart';
 
 /// A mesh library's pieces (`*.meshlib.json`): the workspace one opens in.
 /// Add a shape or a model, name it, say how it is solid, nudge it in its
 /// cell. Its edits have an undo of their own; Save writes the file, and
 /// every grid using it changes.
+///
+/// Nothing can be changed, or saved, until the file has been read: a file
+/// that could not be read is shown as such, never offered for saving.
 class MeshLibraryWorkspace extends StatefulWidget {
   const MeshLibraryWorkspace({
     super.key,
     required this.path,
-    required this.root,
+    required this.files,
     required this.definitions,
     required this.workspace,
     this.loadOnStart = true,
@@ -24,8 +28,8 @@ class MeshLibraryWorkspace extends StatefulWidget {
   /// The library, project-relative.
   final String path;
 
-  /// The project folder.
-  final String root;
+  /// The project's files: its folder, and the models a piece can be.
+  final WorldBuilderFiles files;
 
   /// Turns a shape piece into its saved form and back.
   final ComponentDefinitionRegistry definitions;
@@ -42,12 +46,16 @@ class MeshLibraryWorkspace extends StatefulWidget {
 }
 
 /// The shapes a piece can be, made to fill a cell of [size].
-final List<(String, Primitive3DComponent Function(double size))> meshLibraryShapes = [
+final List<(String, Primitive3DComponent Function(double size))>
+meshLibraryShapes = [
   ('Block', (s) => Cube3DComponent(width: s, height: s, depth: s)),
   ('Ramp', (s) => Ramp3DComponent(width: s, height: s, depth: s)),
   ('Stairs', (s) => Stairs3DComponent(width: s, height: s, depth: s, steps: 4)),
   ('Pillar', (s) => Cylinder3DComponent(radius: s * 0.15, height: s)),
-  ('Arch', (s) => Arch3DComponent(radius: s / 2, thickness: s * 0.15, depth: s)),
+  (
+    'Arch',
+    (s) => Arch3DComponent(radius: s / 2, thickness: s * 0.15, depth: s),
+  ),
 ];
 
 /// The state of a [MeshLibraryWorkspace]; public for tests.
@@ -56,23 +64,39 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
   final List<MeshLibrary> _history = [MeshLibrary()];
   int _at = 0;
   Object? _error;
+  bool _loaded = false;
+  List<String> _models = const [];
+
+  // Each piece's name as typed, not yet kept: kept on Enter, or when the
+  // field loses focus.
+  final Map<int, String> _typed = {};
 
   /// The library being edited.
   MeshLibrary get library => _history[_at];
 
-  /// Whether it differs from the file.
-  bool get dirty => library.encode() != _saved;
+  /// Whether the file has been read: until it is — and when it could not
+  /// be — nothing can be changed or saved.
+  bool get loaded => _loaded;
 
-  File get _file => File('${widget.root}/${widget.path}');
+  /// Whether it differs from the file: never before the file is read.
+  bool get dirty => _loaded && library.encode() != _saved;
+
+  File get _file => File('${widget.files.root}/${widget.path}');
 
   @override
   void initState() {
     super.initState();
-    widget.workspace.setCloseGuard?.call(() async => mayLeaveUnsaved(context, dirty: dirty, save: save));
+    widget.workspace.setCloseGuard?.call(
+      () async => mayLeaveUnsaved(context, dirty: dirty, save: save),
+    );
+    widget.files.models().then((models) {
+      if (mounted) setState(() => _models = models);
+    });
     if (widget.loadOnStart) load();
   }
 
-  /// Reads the file.
+  /// Reads the file. One that cannot be read leaves the workspace showing
+  /// why, with nothing to change or save.
   Future<void> load() async {
     try {
       final text = await _file.readAsString();
@@ -85,14 +109,23 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
           ..add(read);
         _at = 0;
         _error = null;
+        _loaded = true;
+        _typed.clear();
       });
     } on Object catch (error) {
-      if (mounted) setState(() => _error = error);
+      if (mounted) {
+        setState(() {
+          _error = error;
+          _loaded = false;
+        });
+      }
     }
   }
 
-  /// Changes the library as one undo step: [change] edits a copy.
+  /// Changes the library as one undo step: [change] edits a copy. Nothing
+  /// before the file is read.
   void edit(void Function(MeshLibrary library) change) {
+    if (!_loaded) return;
     final next = library.copy();
     change(next);
     setState(() {
@@ -111,13 +144,15 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
     if (_at < _history.length - 1) setState(() => _at++);
   }
 
-  /// Writes the file; whether it went through.
+  /// Writes the file; whether it went through. Refused before the file is
+  /// read: what would be written is not the library.
   Future<bool> save() async {
+    if (!_loaded) return false;
     final text = library.encode();
     try {
       await _file.parent.create(recursive: true);
       await _file.writeAsString(text);
-      setState(() => _saved = text);
+      if (mounted) setState(() => _saved = text);
       widget.workspace.reloadAssets?.call(widget.path);
       return true;
     } on Object catch (error) {
@@ -127,32 +162,38 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
   }
 
   /// Adds a shape piece, filling a cell.
-  void addShape(String name, Primitive3DComponent Function(double size) make) => edit((l) {
-    l.items.add(
-      MeshLibraryItem(
-        id: l.takeId(),
-        name: name,
-        shape: Map<String, Object?>.from(widget.definitions.encode(make(l.cellSize))!),
-        collision: name == 'Block' ? PieceCollision.box : PieceCollision.shape,
-      ),
-    );
-  });
+  void addShape(String name, Primitive3DComponent Function(double size) make) =>
+      edit((l) {
+        l.items.add(
+          MeshLibraryItem(
+            id: l.takeId(),
+            name: name,
+            shape: Map<String, Object?>.from(
+              widget.definitions.encode(make(l.cellSize))!,
+            ),
+            collision: name == 'Block'
+                ? PieceCollision.box
+                : PieceCollision.shape,
+          ),
+        );
+      });
 
   /// Adds a model piece.
   void addModel(String model) => edit((l) {
     l.items.add(
-      MeshLibraryItem(id: l.takeId(), name: model.split('/').last.split('.').first, model: model),
+      MeshLibraryItem(
+        id: l.takeId(),
+        name: model.split('/').last.split('.').first,
+        model: model,
+      ),
     );
   });
 
-  List<String> _models() {
-    final assets = Directory('${widget.root}/assets');
-    if (!assets.existsSync()) return const [];
-    final root = widget.root.replaceAll(r'\', '/');
-    return [
-      for (final f in assets.listSync(recursive: true).whereType<File>())
-        if (f.path.endsWith('.glb') || f.path.endsWith('.gltf')) f.path.replaceAll(r'\', '/').substring(root.length + 1),
-    ]..sort();
+  /// Keeps the name typed for piece [id], if it changed.
+  void _keepName(int id) {
+    final typed = _typed.remove(id)?.trim();
+    if (typed == null || typed == library.item(id)?.name) return;
+    edit((l) => l.item(id)?.name = typed);
   }
 
   @override
@@ -168,7 +209,7 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
             title: 'Mesh library',
             file: widget.path.split('/').last,
             dirty: dirty,
-            onSave: save,
+            onSave: _loaded ? save : null,
             onUndo: _at > 0 ? undo : null,
             onRedo: _at < _history.length - 1 ? redo : null,
             fullScreen: widget.workspace.fullScreen,
@@ -178,7 +219,10 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
           if (_error != null)
             Padding(
               padding: const EdgeInsets.all(12),
-              child: Text('$_error', style: TextStyle(color: EditorTheme.error, fontSize: 11)),
+              child: Text(
+                '$_error',
+                style: TextStyle(color: EditorTheme.error, fontSize: 11),
+              ),
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
@@ -199,26 +243,39 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
                 PopupMenuButton<int>(
                   tooltip: 'Add a shape',
                   color: EditorTheme.menuBg,
-                  onSelected: (i) => addShape(meshLibraryShapes[i].$1, meshLibraryShapes[i].$2),
+                  onSelected: (i) => addShape(
+                    meshLibraryShapes[i].$1,
+                    meshLibraryShapes[i].$2,
+                  ),
                   itemBuilder: (context) => [
                     for (final (i, (name, _)) in meshLibraryShapes.indexed)
                       editorMenuItem(i, name),
                   ],
-                  child: Padding(padding: const EdgeInsets.all(6), child: Text('+ Shape', style: muted)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Text('+ Shape', style: muted),
+                  ),
                 ),
                 PopupMenuButton<String>(
                   tooltip: 'Add a model',
                   color: EditorTheme.menuBg,
                   onSelected: addModel,
                   itemBuilder: (context) {
-                    final models = _models();
+                    final models = _models;
                     return [
                       if (models.isEmpty)
-                        editorMenuItem('', 'No models in assets/', enabled: false),
+                        editorMenuItem(
+                          '',
+                          'No models in assets/',
+                          enabled: false,
+                        ),
                       for (final m in models) editorMenuItem(m, m),
                     ];
                   },
-                  child: Padding(padding: const EdgeInsets.all(6), child: Text('+ Model', style: muted)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Text('+ Model', style: muted),
+                  ),
                 ),
               ],
             ),
@@ -229,8 +286,13 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
               padding: const EdgeInsets.symmetric(vertical: 4),
               children: [
                 if (library.items.isEmpty)
-                  const EditorEmptyState(icon: Icons.grid_view, title: 'No pieces yet', hint: 'Add a shape or a model.'),
-                for (final (i, item) in library.items.indexed) _row(i, item, muted),
+                  const EditorEmptyState(
+                    icon: Icons.grid_view,
+                    title: 'No pieces yet',
+                    hint: 'Add a shape or a model.',
+                  ),
+                for (final (i, item) in library.items.indexed)
+                  _row(i, item, muted),
               ],
             ),
           ),
@@ -240,7 +302,9 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
   }
 
   Widget _row(int index, MeshLibraryItem item, TextStyle muted) {
-    final kind = item.model.isNotEmpty ? item.model : (item.shape?['type'] as String? ?? 'shape');
+    final kind = item.model.isNotEmpty
+        ? item.model
+        : (item.shape?['type'] as String? ?? 'shape');
     return Padding(
       key: ValueKey(item.id),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
@@ -249,15 +313,30 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
           SizedBox(width: 28, child: Text('${item.id}', style: muted)),
           SizedBox(
             width: 140,
-            child: TextFormField(
-              key: ValueKey('name${item.id}$_at'),
-              initialValue: item.name,
-              style: const TextStyle(fontSize: 12),
-              decoration: const InputDecoration(isDense: true, border: InputBorder.none),
-              onFieldSubmitted: (v) => edit((l) => l.item(item.id)!.name = v.trim()),
+            child: Focus(
+              // Kept when the field is left, as well as on Enter.
+              onFocusChange: (focused) {
+                if (!focused) _keepName(item.id);
+              },
+              child: TextFormField(
+                key: ValueKey('name${item.id}$_at'),
+                initialValue: item.name,
+                style: const TextStyle(fontSize: 12),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                ),
+                onChanged: (v) => _typed[item.id] = v,
+                onFieldSubmitted: (v) {
+                  _typed[item.id] = v;
+                  _keepName(item.id);
+                },
+              ),
             ),
           ),
-          Expanded(child: Text(kind, style: muted, overflow: TextOverflow.ellipsis)),
+          Expanded(
+            child: Text(kind, style: muted, overflow: TextOverflow.ellipsis),
+          ),
           SizedBox(
             width: 110,
             child: EditorDropdown<PieceCollision>(
@@ -280,16 +359,19 @@ class MeshLibraryWorkspaceState extends State<MeshLibraryWorkspace> {
           EditorIconButton(
             icon: Icons.arrow_upward,
             tooltip: 'Up in its cell',
-            onTap: () => edit((l) => l.item(item.id)!.offset.y -= l.cellSize / 8),
+            onTap: () =>
+                edit((l) => l.item(item.id)!.offset.y -= l.cellSize / 8),
           ),
           EditorIconButton(
             icon: Icons.arrow_downward,
             tooltip: 'Down in its cell',
-            onTap: () => edit((l) => l.item(item.id)!.offset.y += l.cellSize / 8),
+            onTap: () =>
+                edit((l) => l.item(item.id)!.offset.y += l.cellSize / 8),
           ),
           EditorIconButton(
             icon: Icons.delete_outline,
-            tooltip: 'Remove (tiles of it are left empty; its number is never given to another piece)',
+            tooltip:
+                'Remove (tiles of it are left empty; its number is never given to another piece)',
             onTap: () => edit((l) => l.remove(item.id)),
           ),
         ],

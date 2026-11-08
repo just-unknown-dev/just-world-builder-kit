@@ -2,12 +2,12 @@ import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/painting.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
-import 'grid_tiles.dart';
-import 'mesh_library.dart';
+import 'grid_cells_field_type.dart';
+import 'grid_tiles_3d_component.dart';
 
 /// How [GridTiles3DComponent] is saved, loaded and shown, in the group "World
 /// Builder".
-abstract final class TileDefinitions {
+abstract final class GridTiles3DDefinitions {
   /// The cells' type.
   static const GridCellsFieldType gridCells = GridCellsFieldType();
 
@@ -15,7 +15,8 @@ abstract final class TileDefinitions {
   static List<ComponentDefinition> get all => [gridTiles];
 
   /// [GridTiles3DComponent].
-  static ComponentDefinition<GridTiles3DComponent> get gridTiles => ComponentDefinition<GridTiles3DComponent>(
+  static ComponentDefinition<GridTiles3DComponent>
+  get gridTiles => ComponentDefinition<GridTiles3DComponent>(
     type: 'GridTiles3DComponent',
     id: 'grid_tiles_3d_7f02c6b9',
     create: GridTiles3DComponent.new,
@@ -24,7 +25,8 @@ abstract final class TileDefinitions {
       dimensions: Dimensions.threeD,
       name: 'Grid Tiles 3D',
       group: 'World Builder',
-      description: 'Tiles in a 3-D grid — floors, walls, ramps from a mesh library — painted with the Tiles tool. Solid through a Collider 3D set to match its shape.',
+      description:
+          'Tiles in a 3-D grid — floors, walls, ramps from a mesh library — painted with the Tiles tool. Solid through a Collider 3D set to match its shape.',
       icon: Icons.grid_view,
       accentColor: Color(0xFF26A69A),
       fields: {
@@ -33,11 +35,16 @@ abstract final class TileDefinitions {
           description: 'The mesh library its pieces come from.',
           fileExtensions: ['meshlib.json'],
         ),
-        'cells': FieldHint(label: 'Tiles', description: 'Paint them with the Tiles tool.', editable: false),
+        'cells': FieldHint(
+          label: 'Tiles',
+          description: 'Paint them with the Tiles tool.',
+          editable: false,
+        ),
         'castShadows': FieldHint(label: 'Shadows'),
         'maxDistance': FieldHint(
           label: 'Reach',
-          description: 'Not drawn beyond this far from the camera; 0 for always.',
+          description:
+              'Not drawn beyond this far from the camera; 0 for always.',
           scrub: ScrubHint(step: 1, fractionDigits: 0, suffix: 'm'),
         ),
       },
@@ -61,7 +68,9 @@ abstract final class TileDefinitions {
         write: (c, v) {
           final tiles = c as GridTiles3DComponent;
           tiles
-            ..cells = Map<int, int>.of((v as Map?)?.cast<int, int>() ?? const {})
+            ..cells = Map<int, int>.of(
+              (v as Map?)?.cast<int, int>() ?? const {},
+            )
             ..revision += 1;
         },
       ),
@@ -75,29 +84,11 @@ abstract final class TileDefinitions {
         name: 'maxDistance',
         kind: FieldTypes.decimal,
         read: (c) => (c as GridTiles3DComponent).maxDistance,
-        write: (c, v) => (c as GridTiles3DComponent).maxDistance = (v as num).toDouble(),
+        write: (c, v) =>
+            (c as GridTiles3DComponent).maxDistance = (v as num).toDouble(),
       ),
     ],
   );
-}
-
-/// Ties each [GridTiles3DComponent] to its mesh library, before physics, so its
-/// tiles are solid even where nothing draws them. Writes only their
-/// runtime link.
-class GridTilesLinkSystem extends System {
-  @override
-  int get priority => SystemPriorities.movingPlatform + 1;
-
-  @override
-  List<Type> get requiredComponents => const [GridTiles3DComponent];
-
-  @override
-  void update(double deltaTime) {
-    final libraries = MeshLibraries.of(world.context);
-    for (final entity in entities) {
-      entity.getComponent<GridTiles3DComponent>()!.link(libraries);
-    }
-  }
 }
 
 /// Tiles take up the box round their cells.

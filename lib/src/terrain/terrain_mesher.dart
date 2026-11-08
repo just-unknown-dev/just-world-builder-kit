@@ -40,15 +40,20 @@ abstract final class TerrainMesher {
     final cell = size / (n - 1);
     final origin = -size / 2;
     final i0 = cx * chunkCells, j0 = cz * chunkCells;
-    final i1 = math.min(i0 + chunkCells, n - 1), j1 = math.min(j0 + chunkCells, n - 1);
+    final i1 = math.min(i0 + chunkCells, n - 1),
+        j1 = math.min(j0 + chunkCells, n - 1);
     final w = i1 - i0 + 1, d = j1 - j0 + 1;
     final vertices = Float32List(w * d * kVertexFloats);
     final bounds = Aabb3();
-    final mixed = colors == null ? null : [for (final c in colors) LinearColor.of(c)];
+    final mixed = colors == null
+        ? null
+        : [for (final c in colors) LinearColor.of(c)];
     for (var j = j0; j <= j1; j++) {
       for (var i = i0; i <= i1; i++) {
         final o = ((j - j0) * w + (i - i0)) * kVertexFloats;
-        final x = origin + i * cell, z = origin + j * cell, h = data.height(i, j);
+        final x = origin + i * cell,
+            z = origin + j * cell,
+            h = data.height(i, j);
         // Its slope from its neighbours: up is -Y.
         final dx = (data.height(i + 1, j) - data.height(i - 1, j)) / (2 * cell);
         final dz = (data.height(i, j + 1) - data.height(i, j - 1)) / (2 * cell);
@@ -108,5 +113,6 @@ abstract final class TerrainMesher {
 
   /// Chunks a side, for a terrain of [resolution] samples cut into
   /// [chunkCells]-cell pieces.
-  static int chunksPerSide(int resolution, int chunkCells) => ((resolution - 1) + chunkCells - 1) ~/ chunkCells;
+  static int chunksPerSide(int resolution, int chunkCells) =>
+      ((resolution - 1) + chunkCells - 1) ~/ chunkCells;
 }

@@ -7,13 +7,21 @@ import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 import 'package:just_signals/just_signals.dart';
 
+import 'tool_parts.dart';
+
 /// The tool strip's group for blockout.
 const String blockoutGroup = 'worldBuilder.blockout';
 
 /// What a blockout tool would make now, drawn before it is made: the
 /// edges of a box, an outline, or a line, in the world.
 final class BlockoutPreview {
-  const BlockoutPreview({this.box, this.outline = const [], this.closed = false, this.markers = const [], this.line});
+  const BlockoutPreview({
+    this.box,
+    this.outline = const [],
+    this.closed = false,
+    this.markers = const [],
+    this.line,
+  });
 
   /// A box, by its corners.
   final Aabb3? box;
@@ -29,31 +37,6 @@ final class BlockoutPreview {
 
   /// A line from one point to another.
   final (Vector3, Vector3)? line;
-}
-
-/// Makes an entity of [components] named after [prefix], selected, as one
-/// undo step called [label] — solid, as the engine's Solid shapes are: a
-/// static body and a collider matching its shape, so a blocked-out level
-/// plays at once.
-Entity _make(DesignerToolContext context, List<Component> components, String prefix, String label) {
-  final entity = context.world.createEntityWithComponents(
-    [...components, RigidBody3DComponent(bodyType: Body3DType.static), Collider3DComponent(shape: Collider3DShape.matchShape)],
-    name: context.uniqueName(prefix),
-  );
-  context.history.pushApplied(
-    CreateEntitiesCommand.adopting(
-      label: label,
-      world: context.world,
-      sceneState: context.sceneState,
-      entities: [entity],
-      codec: context.scope.codec,
-    ),
-  );
-  context.sceneState
-    ..markDirty()
-    ..refresh()
-    ..selectEntity(entity);
-  return entity;
 }
 
 /// The axis (0 X, 1 Y, 2 Z) [n] runs most along.
@@ -80,28 +63,23 @@ void _set(Vector3 v, int axis, double value) {
 }
 
 /// Where [ray] meets the plane through [point] facing [normal]; null when
-/// it runs along it or away.
-Vector3? _onPlane(Ray3 ray, Vector3 point, Vector3 normal) {
-  final denom = normal.dot(ray.direction);
-  if (denom.abs() < 1e-9) return null;
-  final t = normal.dot(point - ray.origin) / denom;
-  if (t < 0) return null;
-  return ray.origin + ray.direction * t;
-}
+/// it runs along it or away — the editor's own maths, as a handle's drag
+/// uses it.
+Vector3? _onPlane(Ray3D ray, Vector3 point, Vector3 normal) =>
+    _drag(ray).onPlane(point, normal);
 
 /// How far along the line through [point] in [direction] (unit) the point
 /// nearest [ray] is; null when they run side by side.
-double? _alongLine(Ray3 ray, Vector3 point, Vector3 direction) {
-  final d = ray.direction, w = point - ray.origin;
-  final a = direction.dot(direction), b = direction.dot(d), c = d.dot(d);
-  final e = direction.dot(w), f = d.dot(w);
-  final denom = a * c - b * b;
-  if (denom.abs() < 1e-12) return null;
-  return (b * f - c * e) / denom;
-}
+double? _alongLine(Ray3D ray, Vector3 point, Vector3 direction) =>
+    _drag(ray).alongLine(point, direction);
+
+HandleDrag _drag(Ray3D ray) =>
+    HandleDrag(ray: ray, start: Vector3.zero(), snap: false, grid: 0);
 
 double _snap(double v, SpaceContext space) =>
-    space.snapping && space.moveStep > 0 ? (v / space.moveStep).roundToDouble() * space.moveStep : v;
+    space.snapping && space.moveStep > 0
+    ? (v / space.moveStep).roundToDouble() * space.moveStep
+    : v;
 
 /// Blockout's Block: drag a footprint on any surface — the ground, a wall,
 /// the top of another block — then move the pointer for its height and
@@ -114,7 +92,10 @@ class BlockTool extends LevelToolHandler {
   final DesignerToolContext designer;
 
   /// What it would make now.
-  final Signal<BlockoutPreview?> preview = Signal(null, debugLabel: 'blockPreview');
+  final Signal<BlockoutPreview?> preview = Signal(
+    null,
+    debugLabel: 'blockPreview',
+  );
 
   static const String toolId = 'worldBuilder.block';
 
@@ -156,15 +137,14 @@ class BlockTool extends LevelToolHandler {
     final sign = _get(_normal, axis) < 0 ? -1.0 : 1.0;
     final a = Vector3.copy(base), b = Vector3.copy(corner);
     _set(b, axis, _get(base, axis) + sign * _height);
-    return Aabb3()
-      ..setValues(
-        math.min(a.x, b.x),
-        math.min(a.y, b.y),
-        math.min(a.z, b.z),
-        math.max(a.x, b.x),
-        math.max(a.y, b.y),
-        math.max(a.z, b.z),
-      );
+    return Aabb3()..setValues(
+      math.min(a.x, b.x),
+      math.min(a.y, b.y),
+      math.min(a.z, b.z),
+      math.max(a.x, b.x),
+      math.max(a.y, b.y),
+      math.max(a.z, b.z),
+    );
   }
 
   void _show() {
@@ -209,7 +189,10 @@ class BlockTool extends LevelToolHandler {
     final base = _base, corner = _corner;
     if (base == null || corner == null || _raising) return;
     final axis = _axisOf(_normal);
-    final spread = [for (var i = 0; i < 3; i++) if (i != axis) (_get(corner, i) - _get(base, i)).abs()];
+    final spread = [
+      for (var i = 0; i < 3; i++)
+        if (i != axis) (_get(corner, i) - _get(base, i)).abs(),
+    ];
     if (spread.every((s) => s < 0.05)) {
       // A click: a metre each way, standing on the surface.
       final c = Vector3.copy(base), d = Vector3.copy(base);
@@ -246,16 +229,22 @@ class BlockTool extends LevelToolHandler {
     box
       ..sizeInto(size)
       ..centerInto(centre);
-    _make(
+    makeSolid(
       designer,
       [
         TransformComponent(position: centre),
-        Cube3DComponent(width: math.max(size.x, 0.01), height: math.max(size.y, 0.01), depth: math.max(size.z, 0.01)),
+        Cube3DComponent(
+          width: math.max(size.x, 0.01),
+          height: math.max(size.y, 0.01),
+          depth: math.max(size.z, 0.01),
+        ),
       ],
       'Block',
       'Block out a box',
     );
-    context.controller.setStatus('Blocked out ${size.x.toStringAsFixed(2)} × ${size.y.toStringAsFixed(2)} × ${size.z.toStringAsFixed(2)} m');
+    context.controller.setStatus(
+      'Blocked out ${size.x.toStringAsFixed(2)} × ${size.y.toStringAsFixed(2)} × ${size.z.toStringAsFixed(2)} m',
+    );
   }
 
   void _reset() {
@@ -293,7 +282,10 @@ class FloorTool extends LevelToolHandler {
   final DesignerToolContext designer;
 
   /// What it would make now.
-  final Signal<BlockoutPreview?> preview = Signal(null, debugLabel: 'floorPreview');
+  final Signal<BlockoutPreview?> preview = Signal(
+    null,
+    debugLabel: 'floorPreview',
+  );
 
   /// How thick a floor is (metres).
   final Signal<double> thickness = Signal(0.2, debugLabel: 'floorThickness');
@@ -303,8 +295,7 @@ class FloorTool extends LevelToolHandler {
   /// How near the first corner, on screen, a click closes the outline.
   static const double closeReach = 10;
 
-  final List<Vector3> _points = [];
-  Vector3? _hover;
+  final ClickedPoints _points = ClickedPoints();
   double _level = 0;
 
   @override
@@ -333,13 +324,19 @@ class FloorTool extends LevelToolHandler {
     if (_points.isEmpty) return space.snappedSurface().position;
     final hit = _onPlane(space.ray, Vector3(0, _level, 0), Vector3(0, -1, 0));
     if (hit == null) return null;
-    return space.snapping && space.moveStep > 0 ? SpaceContext.snapAcross(hit, Vector3(0, -1, 0), space.moveStep) : hit;
+    return space.snapping && space.moveStep > 0
+        ? SpaceContext.snapAcross(hit, Vector3(0, -1, 0), space.moveStep)
+        : hit;
   }
 
   void _show() {
     preview.value = _points.isEmpty
         ? null
-        : BlockoutPreview(outline: [..._points, ?_hover], closed: true, markers: List.of(_points));
+        : BlockoutPreview(
+            outline: [..._points.points, ?_points.hover],
+            closed: true,
+            markers: _points.points,
+          );
   }
 
   @override
@@ -349,11 +346,17 @@ class FloorTool extends LevelToolHandler {
     final p = _pointAt(space);
     if (p == null) return true;
     if (_points.isEmpty) _level = p.y;
-    final first = _points.isEmpty ? null : space.view.projectToScreen(_points.first);
-    if (_points.length >= 3 && (context.isDoubleClick || (first != null && (first - space.screen).distance <= closeReach))) {
+    final first = _points.isEmpty
+        ? null
+        : space.view.projectToScreen(_points.first);
+    if (_points.length >= 3 &&
+        (context.isDoubleClick ||
+            (first != null && (first - space.screen).distance <= closeReach))) {
       _finish(context);
       return true;
     }
+    // The second click of a double-click, with too few corners to close:
+    // no corner twice.
     _points.add(Vector3(p.x, _level, p.z));
     _show();
     return true;
@@ -364,14 +367,15 @@ class FloorTool extends LevelToolHandler {
     final space = context.space;
     if (space == null || _points.isEmpty) return;
     final p = _pointAt(space);
-    _hover = p == null ? null : Vector3(p.x, _level, p.z);
+    _points.hover = p == null ? null : Vector3(p.x, _level, p.z);
     _show();
   }
 
   @override
   bool onKey(LogicalKeyboardKey key, ToolContext context) {
     if (_points.isEmpty) return false;
-    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
       _finish(context);
       return true;
     }
@@ -393,20 +397,23 @@ class FloorTool extends LevelToolHandler {
       return;
     }
     var cx = 0.0, cz = 0.0;
-    for (final p in _points) {
+    for (final p in _points.points) {
       cx += p.x;
       cz += p.z;
     }
     cx /= _points.length;
     cz /= _points.length;
     final t = thickness.value;
-    final points = [for (final p in _points) Offset(p.x - cx, p.z - cz)];
+    final points = [for (final p in _points.points) Offset(p.x - cx, p.z - cz)];
     _reset();
     // +Y is down: its top on the surface, its middle half its thickness
     // below.
-    _make(
+    makeSolid(
       designer,
-      [TransformComponent(position: Vector3(cx, _level + t / 2, cz)), Polygon3DComponent(points: points, height: t)],
+      [
+        TransformComponent(position: Vector3(cx, _level + t / 2, cz)),
+        Polygon3DComponent(points: points, height: t),
+      ],
       'Floor',
       'Block out a floor',
     );
@@ -415,7 +422,6 @@ class FloorTool extends LevelToolHandler {
 
   void _reset() {
     _points.clear();
-    _hover = null;
     preview.value = null;
   }
 
@@ -423,12 +429,13 @@ class FloorTool extends LevelToolHandler {
   void onDeactivate() => _reset();
 
   @override
-  Widget? buildOptions(BuildContext context, ToolOptionsContext options) => _Choices<double>(
-    label: 'Thickness',
-    signal: thickness,
-    values: const [0.1, 0.2, 0.5, 1],
-    text: (v) => '$v m',
-  );
+  Widget? buildOptions(BuildContext context, ToolOptionsContext options) =>
+      _Choices<double>(
+        label: 'Thickness',
+        signal: thickness,
+        values: const [0.1, 0.2, 0.5, 1],
+        text: (v) => '$v m',
+      );
 }
 
 /// Ramps and stairs, as Ramp and Stairs make them.
@@ -445,10 +452,16 @@ class RampTool extends LevelToolHandler {
   final DesignerToolContext designer;
 
   /// What it would make now.
-  final Signal<BlockoutPreview?> preview = Signal(null, debugLabel: 'rampPreview');
+  final Signal<BlockoutPreview?> preview = Signal(
+    null,
+    debugLabel: 'rampPreview',
+  );
 
   /// A ramp or stairs.
-  final Signal<SlopeKind> kind = Signal(SlopeKind.ramp, debugLabel: 'slopeKind');
+  final Signal<SlopeKind> kind = Signal(
+    SlopeKind.ramp,
+    debugLabel: 'slopeKind',
+  );
 
   /// How wide (metres).
   final Signal<double> width = Signal(2, debugLabel: 'slopeWidth');
@@ -470,7 +483,8 @@ class RampTool extends LevelToolHandler {
   IconData get icon => Icons.trending_up;
 
   @override
-  String? get description => 'Drag from the foot of a slope up to its top for a ramp or stairs';
+  String? get description =>
+      'Drag from the foot of a slope up to its top for a ramp or stairs';
 
   @override
   int get order => 42;
@@ -510,20 +524,32 @@ class RampTool extends LevelToolHandler {
     final rise = foot.y - top.y;
     final run = Vector3(top.x - foot.x, 0, top.z - foot.z);
     if (run.length < 0.1 || rise < 0.05) {
-      context.controller.setStatus('Drag from the foot of the slope up to its top');
+      context.controller.setStatus(
+        'Drag from the foot of the slope up to its top',
+      );
       return;
     }
     final w = width.value;
     final turn = math.atan2(run.x, run.z);
-    final centre = Vector3((foot.x + top.x) / 2, foot.y - rise / 2, (foot.z + top.z) / 2);
+    final centre = Vector3(
+      (foot.x + top.x) / 2,
+      foot.y - rise / 2,
+      (foot.z + top.z) / 2,
+    );
     final stairs = kind.value == SlopeKind.stairs;
-    final transform = TransformComponent(position: centre)..setEuler(0, turn, 0);
-    _make(
+    final transform = TransformComponent(position: centre)
+      ..setEuler(0, turn, 0);
+    makeSolid(
       designer,
       [
         transform,
         if (stairs)
-          Stairs3DComponent(width: w, height: rise, depth: run.length, steps: math.max(2, (rise / stepHeight).round()))
+          Stairs3DComponent(
+            width: w,
+            height: rise,
+            depth: run.length,
+            steps: math.max(2, (rise / stepHeight).round()),
+          )
         else
           Ramp3DComponent(width: w, height: rise, depth: run.length),
       ],
@@ -531,7 +557,9 @@ class RampTool extends LevelToolHandler {
       stairs ? 'Block out stairs' : 'Block out a ramp',
     );
     final degrees = math.atan2(rise, run.length) * 180 / math.pi;
-    context.controller.setStatus('${stairs ? 'Stairs' : 'A ramp'}: ${rise.toStringAsFixed(2)} m up over ${run.length.toStringAsFixed(2)} m (${degrees.round()}°)');
+    context.controller.setStatus(
+      '${stairs ? 'Stairs' : 'A ramp'}: ${rise.toStringAsFixed(2)} m up over ${run.length.toStringAsFixed(2)} m (${degrees.round()}°)',
+    );
   }
 
   @override
@@ -548,19 +576,32 @@ class RampTool extends LevelToolHandler {
         signal: kind,
         builder: (context, k, _) => EditorSegmented<SlopeKind>(
           value: k,
-          options: const [(SlopeKind.ramp, 'Ramp'), (SlopeKind.stairs, 'Stairs')],
+          options: const [
+            (SlopeKind.ramp, 'Ramp'),
+            (SlopeKind.stairs, 'Stairs'),
+          ],
           onChanged: (v) => kind.value = v,
         ),
       ),
       const SizedBox(width: 8),
-      _Choices<double>(label: 'Width', signal: width, values: const [1, 2, 3, 4, 6], text: (v) => '$v m'),
+      _Choices<double>(
+        label: 'Width',
+        signal: width,
+        values: const [1, 2, 3, 4, 6],
+        text: (v) => '$v m',
+      ),
     ],
   );
 }
 
 /// A small picker of a few values, with a label.
 class _Choices<T> extends StatelessWidget {
-  const _Choices({required this.label, required this.signal, required this.values, required this.text});
+  const _Choices({
+    required this.label,
+    required this.signal,
+    required this.values,
+    required this.text,
+  });
 
   final String label;
   final Signal<T> signal;
@@ -577,12 +618,14 @@ class _Choices<T> extends StatelessWidget {
       position: PopupMenuPosition.over,
       onSelected: (v) => signal.value = v,
       itemBuilder: (context) => [
-        for (final v in values)
-          editorMenuItem(v, text(v)),
+        for (final v in values) editorMenuItem(v, text(v)),
       ],
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Text('$label ${text(value)}', style: TextStyle(color: EditorTheme.textSecondary, fontSize: 11)),
+        child: Text(
+          '$label ${text(value)}',
+          style: TextStyle(color: EditorTheme.textSecondary, fontSize: 11),
+        ),
       ),
     ),
   );

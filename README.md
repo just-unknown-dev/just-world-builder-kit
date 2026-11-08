@@ -109,7 +109,10 @@ appears as **World Builder** in the Level Designer's switch in 3-D scenes:
   Terrain panel names the terrain being shaped, holds the brush (what it
   does, its size and strength, the layer it paints), makes a new terrain
   (its size, and its detail: coarse, medium or fine) and gives a shared one
-  a file of its own. Terrain files are written when the scene is saved.
+  a file of its own. A new terrain's file is never another's: a name taken
+  by a terrain renamed or removed, or by a file on disk, gets `_2`, `_3`….
+  Terrain files are written when the scene is saved; one that cannot be
+  written fails the save and stays to be written.
 - **SCATTER**: Scatter — drag over the ground (terrain, tiles, shapes,
   models) for the chosen layer's pieces, each set down on what is under it;
   Shift erases. The Scatter panel names the scatter being painted, holds the
@@ -117,7 +120,8 @@ appears as **World Builder** in the Level Designer's switch in 3-D scenes:
   inspector edits every setting of every layer.
 
 The side panel's TILES, TERRAIN and SCATTER sections open with their own
-tools.
+tools. The project's mesh libraries and models are listed once, off the UI
+thread, and listed again when one changes.
 
 Each stroke is one undo step.
 

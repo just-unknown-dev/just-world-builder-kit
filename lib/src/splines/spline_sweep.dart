@@ -15,7 +15,10 @@ import 'spline_path.dart';
 abstract final class SplineSweeper {
   /// [sweep]'s mesh along [spline] — the last one made when neither has
   /// changed — or null when the spline has no length.
-  static SweptMesh? meshFor(SplineSweep3DComponent sweep, Spline3DComponent spline) {
+  static SweptMesh? meshFor(
+    SplineSweep3DComponent sweep,
+    Spline3DComponent spline,
+  ) {
     sweep.spline = spline;
     final key = sweep.sweepKey;
     if (sweep.cached != null && sweep.cachedKey == key) return sweep.cached;
@@ -36,12 +39,15 @@ abstract final class SplineSweeper {
       // Its top on the spline.
       SweepProfile.road => [(-w, 0), (w, 0), (w, -h), (-w, -h)],
       // Standing on the spline.
-      SweepProfile.wall || SweepProfile.rail => [(-w, 0), (w, 0), (w, h), (-w, h)],
+      SweepProfile.wall ||
+      SweepProfile.rail => [(-w, 0), (w, 0), (w, h), (-w, h)],
       SweepProfile.pipe => [
         for (var i = 0; i < math.max(3, sweep.sides); i++)
           (
-            math.cos(2 * math.pi * i / math.max(3, sweep.sides)) * math.max(sweep.radius, 0.01),
-            math.sin(2 * math.pi * i / math.max(3, sweep.sides)) * math.max(sweep.radius, 0.01),
+            math.cos(2 * math.pi * i / math.max(3, sweep.sides)) *
+                math.max(sweep.radius, 0.01),
+            math.sin(2 * math.pi * i / math.max(3, sweep.sides)) *
+                math.max(sweep.radius, 0.01),
           ),
       ],
     };
@@ -62,20 +68,29 @@ abstract final class SplineSweeper {
     final step = math.max(sweep.step, 0.05);
     final length = path.length;
     final count = math.max(1, (length / step).ceil());
-    final frames = [for (var i = 0; i <= count; i++) path.at(length * i / count)];
+    final frames = [
+      for (var i = 0; i <= count; i++) path.at(length * i / count),
+    ];
     final b = MeshBuilder();
     final tiling = sweep.tiling <= 0 ? 1.0 : sweep.tiling;
-    Vector3 place(SplineFrame f, double x, double y) => f.position + f.right * x + f.up * y;
-    Vector3 across(SplineFrame f, double x, double y) => (f.right * x + f.up * y)..normalize();
+    Vector3 place(SplineFrame f, double x, double y) =>
+        f.position + f.right * x + f.up * y;
+    Vector3 across(SplineFrame f, double x, double y) =>
+        (f.right * x + f.up * y)..normalize();
 
     // Round the outline: how far each corner is.
     final perimeter = <double>[0];
     for (var i = 0; i < outline.length; i++) {
       final (x0, y0) = outline[i];
       final (x1, y1) = outline[(i + 1) % outline.length];
-      perimeter.add(perimeter.last + math.sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)));
+      perimeter.add(
+        perimeter.last +
+            math.sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)),
+      );
     }
-    final along = [for (var i = 0; i <= count; i++) length * i / count * tiling];
+    final along = [
+      for (var i = 0; i <= count; i++) length * i / count * tiling,
+    ];
 
     if (smooth) {
       // One ring of points per frame, each pointing out from the middle.
@@ -87,13 +102,27 @@ abstract final class SplineSweeper {
             () {
               final (x, y) = outline[i % outline.length];
               final p = place(f, x, y), n = across(f, x, y);
-              return b.vertex(p.x, p.y, p.z, n.x, n.y, n.z, perimeter[i] * tiling, along[k]);
+              return b.vertex(
+                p.x,
+                p.y,
+                p.z,
+                n.x,
+                n.y,
+                n.z,
+                perimeter[i] * tiling,
+                along[k],
+              );
             }(),
         ]);
       }
       for (var k = 0; k < count; k++) {
         for (var i = 0; i < outline.length; i++) {
-          b.quad(rings[k][i], rings[k][i + 1], rings[k + 1][i + 1], rings[k + 1][i]);
+          b.quad(
+            rings[k][i],
+            rings[k][i + 1],
+            rings[k + 1][i + 1],
+            rings[k + 1][i],
+          );
         }
       }
     } else {
@@ -109,8 +138,26 @@ abstract final class SplineSweeper {
           final n = across(f, nx, ny);
           final a = place(f, x0, y0), c = place(f, x1, y1);
           strip.add((
-            b.vertex(a.x, a.y, a.z, n.x, n.y, n.z, perimeter[i] * tiling, along[k]),
-            b.vertex(c.x, c.y, c.z, n.x, n.y, n.z, perimeter[i + 1] * tiling, along[k]),
+            b.vertex(
+              a.x,
+              a.y,
+              a.z,
+              n.x,
+              n.y,
+              n.z,
+              perimeter[i] * tiling,
+              along[k],
+            ),
+            b.vertex(
+              c.x,
+              c.y,
+              c.z,
+              n.x,
+              n.y,
+              n.z,
+              perimeter[i + 1] * tiling,
+              along[k],
+            ),
           ));
         }
         for (var k = 0; k < count; k++) {
@@ -127,7 +174,16 @@ abstract final class SplineSweeper {
           for (final (x, y) in outline)
             () {
               final p = place(f, x, y);
-              return b.vertex(p.x, p.y, p.z, n.x, n.y, n.z, x * tiling, y * tiling);
+              return b.vertex(
+                p.x,
+                p.y,
+                p.z,
+                n.x,
+                n.y,
+                n.z,
+                x * tiling,
+                y * tiling,
+              );
             }(),
         ];
         for (var i = 1; i + 1 < ring.length; i++) {

@@ -7,9 +7,9 @@ import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 import 'package:just_signals/just_signals.dart';
 
-import '../splines/spline_components.dart';
-import '../splines/spline_path.dart';
+import '../splines/splines.dart';
 import 'blockout_tools.dart' show BlockoutPreview;
+import 'tool_parts.dart';
 
 /// The tool strip's group for splines.
 const String splineGroup = 'worldBuilder.splines';
@@ -41,25 +41,6 @@ enum SplineMake {
 
   final String label;
   final IconData icon;
-}
-
-/// Adds [entities], made already, to the scene as one undo step called
-/// [label], and selects the first.
-void adoptEntities(DesignerToolContext context, List<Entity> entities, String label) {
-  if (entities.isEmpty) return;
-  context.history.pushApplied(
-    CreateEntitiesCommand.adopting(
-      label: label,
-      world: context.world,
-      sceneState: context.sceneState,
-      entities: entities,
-      codec: context.scope.codec,
-    ),
-  );
-  context.sceneState
-    ..markDirty()
-    ..refresh()
-    ..selectEntity(entities.first);
 }
 
 /// The rotation whose matrix has the columns [x], [y] and [z] — unit
@@ -112,10 +93,16 @@ class SplineTool extends LevelToolHandler {
   final DesignerToolContext designer;
 
   /// What it would make now.
-  final Signal<BlockoutPreview?> preview = Signal(null, debugLabel: 'splinePreview');
+  final Signal<BlockoutPreview?> preview = Signal(
+    null,
+    debugLabel: 'splinePreview',
+  );
 
   /// What it makes.
-  final Signal<SplineMake> make = Signal(SplineMake.road, debugLabel: 'splineMake');
+  final Signal<SplineMake> make = Signal(
+    SplineMake.road,
+    debugLabel: 'splineMake',
+  );
 
   /// Whether it runs round from its last point to its first.
   final Signal<bool> closed = Signal(false, debugLabel: 'splineClosed');
@@ -128,8 +115,7 @@ class SplineTool extends LevelToolHandler {
   /// How near the first point, on screen, a click closes the spline.
   static const double closeReach = 10;
 
-  final List<Vector3> _points = [];
-  Vector3? _hover;
+  final ClickedPoints _points = ClickedPoints();
 
   @override
   String get id => toolId;
@@ -154,7 +140,7 @@ class SplineTool extends LevelToolHandler {
   Dimensions get dimensions => Dimensions.threeD;
 
   /// The points clicked so far, in the world.
-  List<Vector3> get points => List.unmodifiable(_points);
+  List<Vector3> get points => _points.points;
 
   void _show() {
     if (_points.isEmpty) {
@@ -162,12 +148,20 @@ class SplineTool extends LevelToolHandler {
       return;
     }
     final spline = Spline3DComponent(
-      points: [for (final p in [..._points, ?_hover]) SplinePoint(position: p)],
-      interpolation: smooth.value ? SplineInterpolation.catmullRom : SplineInterpolation.linear,
+      points: [
+        for (final p in [..._points.points, ?_points.hover])
+          SplinePoint(position: p),
+      ],
+      interpolation: smooth.value
+          ? SplineInterpolation.catmullRom
+          : SplineInterpolation.linear,
       closed: closed.value,
     );
     final path = SplinePath.of(spline, perSegment: 12);
-    preview.value = BlockoutPreview(outline: path.positions, markers: List.of(_points));
+    preview.value = BlockoutPreview(
+      outline: path.positions,
+      markers: _points.points,
+    );
   }
 
   @override
@@ -179,15 +173,18 @@ class SplineTool extends LevelToolHandler {
       _finish(context);
       return true;
     }
-    final first = _points.isEmpty ? null : space.view.projectToScreen(_points.first);
-    if (_points.length >= 3 && first != null && (first - space.screen).distance <= closeReach) {
+    final first = _points.isEmpty
+        ? null
+        : space.view.projectToScreen(_points.first);
+    if (_points.length >= 3 &&
+        first != null &&
+        (first - space.screen).distance <= closeReach) {
       // Closed this once: the option stays as it was for the next.
       _finish(context, close: true);
       return true;
     }
     // A second click on the same spot (the first click of a double-click)
     // adds no point: a spline through one spot twice folds back on itself.
-    if (_points.isNotEmpty && (_points.last - p).lengthSquared < 1e-6) return true;
     _points.add(p);
     _show();
     return true;
@@ -197,14 +194,15 @@ class SplineTool extends LevelToolHandler {
   void onPointerHover(ToolContext context) {
     final space = context.space;
     if (space == null || _points.isEmpty) return;
-    _hover = space.snappedSurface().position;
+    _points.hover = space.snappedSurface().position;
     _show();
   }
 
   @override
   bool onKey(LogicalKeyboardKey key, ToolContext context) {
     if (_points.isEmpty) return false;
-    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
       _finish(context);
       return true;
     }
@@ -228,15 +226,19 @@ class SplineTool extends LevelToolHandler {
     final kind = make.value;
     final made = build(
       designer,
-      _points,
+      _points.points,
       kind,
       closed: (close || closed.value) && _points.length >= 3,
       smooth: smooth.value,
     );
     _reset();
     adoptEntities(designer, made, 'Draw a ${kind.label.toLowerCase()}');
-    final length = SplinePath.of(made.first.getComponent<Spline3DComponent>()!).length;
-    context.controller.setStatus('${kind.label}: ${length.toStringAsFixed(1)} m');
+    final length = SplinePath.of(
+      made.first.getComponent<Spline3DComponent>()!,
+    ).length;
+    context.controller.setStatus(
+      '${kind.label}: ${length.toStringAsFixed(1)} m',
+    );
   }
 
   /// The entities a spline through [points] (in the world) makes as
@@ -260,9 +262,20 @@ class SplineTool extends LevelToolHandler {
     };
     final origin = Vector3.copy(points.first)..y -= lift;
     final spline = Spline3DComponent(
-      points: [for (final p in points) SplinePoint(position: Vector3(p.x - origin.x, p.y - lift - origin.y, p.z - origin.z))],
+      points: [
+        for (final p in points)
+          SplinePoint(
+            position: Vector3(
+              p.x - origin.x,
+              p.y - lift - origin.y,
+              p.z - origin.z,
+            ),
+          ),
+      ],
       closed: closed,
-      interpolation: smooth ? SplineInterpolation.catmullRom : SplineInterpolation.linear,
+      interpolation: smooth
+          ? SplineInterpolation.catmullRom
+          : SplineInterpolation.linear,
     );
     List<Component> solid(SplineSweep3DComponent sweep) => [
       sweep,
@@ -278,27 +291,52 @@ class SplineTool extends LevelToolHandler {
       spline,
       ...switch (kind) {
         SplineMake.path || SplineMake.route => const <Component>[],
-        SplineMake.road => solid(SplineSweep3DComponent(profile: SweepProfile.road, width: 3, height: 0.3)),
-        SplineMake.wall => solid(SplineSweep3DComponent(profile: SweepProfile.wall, width: 0.3, height: 2.5)),
-        SplineMake.pipe => solid(SplineSweep3DComponent(profile: SweepProfile.pipe, radius: pipeRadius)),
-        SplineMake.rail => solid(SplineSweep3DComponent(profile: SweepProfile.rail, width: 0.2, height: 0.2, color: const Color(0xFF8D6E63))),
-        SplineMake.fence => [SplineInstances3DComponent(spacing: 2, scale: 0.3)],
+        SplineMake.road => solid(
+          SplineSweep3DComponent(
+            profile: SweepProfile.road,
+            width: 3,
+            height: 0.3,
+          ),
+        ),
+        SplineMake.wall => solid(
+          SplineSweep3DComponent(
+            profile: SweepProfile.wall,
+            width: 0.3,
+            height: 2.5,
+          ),
+        ),
+        SplineMake.pipe => solid(
+          SplineSweep3DComponent(
+            profile: SweepProfile.pipe,
+            radius: pipeRadius,
+          ),
+        ),
+        SplineMake.rail => solid(
+          SplineSweep3DComponent(
+            profile: SweepProfile.rail,
+            width: 0.2,
+            height: 0.2,
+            color: const Color(0xFF8D6E63),
+          ),
+        ),
+        SplineMake.fence => [
+          SplineInstances3DComponent(spacing: 2, scale: 0.3),
+        ],
       },
     ];
-    final made = [designer.world.createEntityWithComponents(pieces, name: name)];
+    final made = [
+      designer.world.createEntityWithComponents(pieces, name: name),
+    ];
     if (kind == SplineMake.route) {
       // A platform riding it, its middle on the spline.
       made.add(
-        designer.world.createEntityWithComponents(
-          [
-            TransformComponent(position: Vector3.copy(origin)),
-            Cube3DComponent(width: 3, height: platformThickness, depth: 3),
-            RigidBody3DComponent(bodyType: Body3DType.kinematic),
-            Collider3DComponent(shape: Collider3DShape.matchShape),
-            PathFollower3DComponent(path: EntityTarget.name(name)),
-          ],
-          name: designer.uniqueName('Platform'),
-        ),
+        designer.world.createEntityWithComponents([
+          TransformComponent(position: Vector3.copy(origin)),
+          Cube3DComponent(width: 3, height: platformThickness, depth: 3),
+          RigidBody3DComponent(bodyType: Body3DType.kinematic),
+          Collider3DComponent(shape: Collider3DShape.matchShape),
+          PathFollower3DComponent(path: EntityTarget.name(name)),
+        ], name: designer.uniqueName('Platform')),
       );
     }
     return made;
@@ -306,7 +344,6 @@ class SplineTool extends LevelToolHandler {
 
   void _reset() {
     _points.clear();
-    _hover = null;
     preview.value = null;
   }
 
@@ -331,7 +368,10 @@ class SplineTool extends LevelToolHandler {
           ],
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text('Make ${value.label}', style: TextStyle(color: EditorTheme.textSecondary, fontSize: 11)),
+            child: Text(
+              'Make ${value.label}',
+              style: TextStyle(color: EditorTheme.textSecondary, fontSize: 11),
+            ),
           ),
         ),
       ),

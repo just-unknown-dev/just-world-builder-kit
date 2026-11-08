@@ -6,15 +6,17 @@ import 'scatter_components.dart';
 
 /// How [Scatter3DComponent] is saved, loaded and shown, in the group "World
 /// Builder".
-abstract final class ScatterDefinitions {
+abstract final class Scatter3DDefinitions {
   static const ScatterLayersFieldType layersType = ScatterLayersFieldType();
-  static const ScatterInstancesFieldType instancesType = ScatterInstancesFieldType();
+  static const ScatterInstancesFieldType instancesType =
+      ScatterInstancesFieldType();
 
   /// Every one.
   static List<ComponentDefinition> get all => [scatter];
 
   /// [Scatter3DComponent].
-  static ComponentDefinition<Scatter3DComponent> get scatter => ComponentDefinition<Scatter3DComponent>(
+  static ComponentDefinition<Scatter3DComponent>
+  get scatter => ComponentDefinition<Scatter3DComponent>(
     type: 'Scatter3DComponent',
     id: 'scatter_3d_a91f0d64',
     create: Scatter3DComponent.new,
@@ -23,13 +25,26 @@ abstract final class ScatterDefinitions {
       dimensions: Dimensions.threeD,
       name: 'Scatter 3D',
       group: 'World Builder',
-      description: 'Grass, flowers, rocks, trees scattered over the ground with the Scatter brush; layers that say so are solid through a Collider 3D set to match its shape.',
+      description:
+          'Grass, flowers, rocks, trees scattered over the ground with the Scatter brush; layers that say so are solid through a Collider 3D set to match its shape.',
       icon: Icons.grass,
       accentColor: Color(0xFF26A69A),
       fields: {
-        'layers': FieldHint(label: 'Layers', description: 'Edit them in the Scatter panel.', editable: false),
-        'instances': FieldHint(label: 'Pieces', description: 'Paint them with the Scatter brush.', editable: false),
-        'cellSize': FieldHint(label: 'Squares', description: 'Metres a side of each square its pieces are drawn in.', scrub: ScrubHint(step: 1, fractionDigits: 0, suffix: 'm')),
+        'layers': FieldHint(
+          label: 'Layers',
+          description: 'Edit them in the Scatter panel.',
+          editable: false,
+        ),
+        'instances': FieldHint(
+          label: 'Pieces',
+          description: 'Paint them with the Scatter brush.',
+          editable: false,
+        ),
+        'cellSize': FieldHint(
+          label: 'Squares',
+          description: 'Metres a side of each square its pieces are drawn in.',
+          scrub: ScrubHint(step: 1, fractionDigits: 0, suffix: 'm'),
+        ),
         'castShadows': FieldHint(label: 'Shadows'),
       },
     ),
@@ -37,22 +52,30 @@ abstract final class ScatterDefinitions {
       FieldDefinition(
         name: 'layers',
         kind: layersType,
-        read: (c) => [for (final l in (c as Scatter3DComponent).layers) l.copy()],
+        read: (c) => [
+          for (final l in (c as Scatter3DComponent).layers) l.copy(),
+        ],
         write: (c, v) {
           final s = c as Scatter3DComponent;
           s
-            ..layers = [for (final l in (v as List?) ?? const []) l is ScatterLayer ? l.copy() : ScatterLayer.fromJson(l)]
+            ..layers = [
+              for (final l in (v as List?) ?? const [])
+                l is ScatterLayer ? l.copy() : ScatterLayer.fromJson(l),
+            ]
             ..revision += 1;
         },
       ),
       FieldDefinition(
         name: 'instances',
         kind: instancesType,
-        read: (c) => List<ScatterInstance>.of((c as Scatter3DComponent).instances),
+        read: (c) =>
+            List<ScatterInstance>.of((c as Scatter3DComponent).instances),
         write: (c, v) {
           final s = c as Scatter3DComponent;
           s
-            ..instances = List<ScatterInstance>.of((v as List?)?.cast<ScatterInstance>() ?? const [])
+            ..instances = List<ScatterInstance>.of(
+              (v as List?)?.cast<ScatterInstance>() ?? const [],
+            )
             ..revision += 1;
         },
       ),

@@ -12,7 +12,8 @@ final class ScatterRenderProvider extends RenderProvider<Scatter3DComponent> {
   Graphics3DModels? _models;
 
   @override
-  Object? revisionOf(Scatter3DComponent c) => (c.revision, c.castShadows, c.cellSize, _modelsReady(c));
+  Object? revisionOf(Scatter3DComponent c) =>
+      (c.revision, c.castShadows, c.cellSize, _modelsReady(c));
 
   /// How many of [c]'s layers' models are loaded: a count that changes as
   /// they arrive.
@@ -27,7 +28,12 @@ final class ScatterRenderProvider extends RenderProvider<Scatter3DComponent> {
   }
 
   @override
-  void build(RenderProviderContext ctx, Entity entity, Scatter3DComponent c, RenderProviderOutput out) {
+  void build(
+    RenderProviderContext ctx,
+    Entity entity,
+    Scatter3DComponent c,
+    RenderProviderOutput out,
+  ) {
     _models = ctx.models;
     if (c.instances.isEmpty) return;
     for (final MapEntry(key: layer, value: cells) in placements(c).entries) {
@@ -48,11 +54,17 @@ final class ScatterRenderProvider extends RenderProvider<Scatter3DComponent> {
     }
   }
 
-  List<(GpuPrimitive, GpuMaterial, Matrix4?)> _partsOf(RenderProviderContext ctx, ScatterLayer l) {
+  List<(GpuPrimitive, GpuMaterial, Matrix4?)> _partsOf(
+    RenderProviderContext ctx,
+    ScatterLayer l,
+  ) {
     if (l.model.isNotEmpty) {
       final model = ctx.models.get(l.model);
       if (model == null) return const [];
-      return [for (final part in RenderScene().addModel(model, Matrix4.identity())) (part.primitive, part.material, part.world)];
+      return [
+        for (final part in Render3DScene().addModel(model, Matrix4.identity()))
+          (part.primitive, part.material, part.world),
+      ];
     }
     final (shape, height) = shapeOf(l);
     final mesh = ctx.shapes.meshFor(shape, Vector3(1, 1, 1));
@@ -62,29 +74,61 @@ final class ScatterRenderProvider extends RenderProvider<Scatter3DComponent> {
       (
         mesh,
         ctx.shapes.materialFor(shape),
-        Matrix4.identity()..setFromTrs(Vector3(0, -height / 2, 0), Quaternion.identity(), Vector3(1, 1, 1)),
+        Matrix4.identity()..setFromTrs(
+          Vector3(0, -height / 2, 0),
+          Quaternion.identity(),
+          Vector3(1, 1, 1),
+        ),
       ),
     ];
   }
 
   /// The shape [layer]'s pieces are without a model, and how tall it is.
-  static (Primitive3DComponent, double) shapeOf(ScatterLayer layer) => switch (layer.shape) {
-    ScatterShape.cone => (Cone3DComponent(radius: 0.4, height: 1.2, color: layer.color), 1.2),
-    ScatterShape.cube => (Cube3DComponent(width: 0.8, height: 0.8, depth: 0.8, color: layer.color), 0.8),
-    ScatterShape.sphere => (Sphere3DComponent(radius: 0.45, color: layer.color), 0.9),
-    ScatterShape.cylinder => (Cylinder3DComponent(radius: 0.3, height: 1.2, color: layer.color), 1.2),
-    ScatterShape.capsule => (Capsule3DComponent(radius: 0.3, height: 1.2, color: layer.color), 1.2),
-  };
+  static (Primitive3DComponent, double) shapeOf(ScatterLayer layer) =>
+      switch (layer.shape) {
+        ScatterShape.cone => (
+          Cone3DComponent(radius: 0.4, height: 1.2, color: layer.color),
+          1.2,
+        ),
+        ScatterShape.cube => (
+          Cube3DComponent(
+            width: 0.8,
+            height: 0.8,
+            depth: 0.8,
+            color: layer.color,
+          ),
+          0.8,
+        ),
+        ScatterShape.sphere => (
+          Sphere3DComponent(radius: 0.45, color: layer.color),
+          0.9,
+        ),
+        ScatterShape.cylinder => (
+          Cylinder3DComponent(radius: 0.3, height: 1.2, color: layer.color),
+          1.2,
+        ),
+        ScatterShape.capsule => (
+          Capsule3DComponent(radius: 0.3, height: 1.2, color: layer.color),
+          1.2,
+        ),
+      };
 
   /// Where [c]'s pieces are drawn, in its entity's space: by layer, then
   /// by square.
-  static Map<int, Map<(int, int), List<Matrix4>>> placements(Scatter3DComponent c) {
+  static Map<int, Map<(int, int), List<Matrix4>>> placements(
+    Scatter3DComponent c,
+  ) {
     final size = c.cellSize <= 0 ? 32.0 : c.cellSize;
     final out = <int, Map<(int, int), List<Matrix4>>>{};
     for (final i in c.instances) {
       if (i.layer < 0 || i.layer >= c.layers.length) continue;
-      final square = ((i.position.x / size).floor(), (i.position.z / size).floor());
-      ((out[i.layer] ??= {})[square] ??= []).add(i.matrix(lean: c.layers[i.layer].alignToNormal));
+      final square = (
+        (i.position.x / size).floor(),
+        (i.position.z / size).floor(),
+      );
+      ((out[i.layer] ??= {})[square] ??= []).add(
+        i.matrix(lean: c.layers[i.layer].alignToNormal),
+      );
     }
     return out;
   }

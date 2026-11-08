@@ -29,8 +29,8 @@
     "store/card.png"
   ],
   "requires": {
-    "just_game_engine": "^2.0.0-dev.2",
-    "just_game_engine_editor": "^0.1.0-dev.1"
+    "just_game_engine": "^2.0.0",
+    "just_game_engine_editor": "^0.1.0"
   },
   "runtime": {
     "componentTypes": [
@@ -62,5 +62,5 @@
     "level design",
     "terrain"
   ],
-  "version": "0.1.0-beta.1"
+  "version": "0.2.0-beta.1"
 }

@@ -5,6 +5,7 @@ import 'package:just_game_engine/just_game_engine.dart';
 
 import 'terrain_3d_component.dart';
 import 'terrain_data.dart';
+import 'terrain_files.dart';
 import 'terrain_mesher.dart';
 
 /// Draws a [Terrain3DComponent] in chunks, each made again only when a sample in it
@@ -40,7 +41,12 @@ final class TerrainRenderProvider extends RenderProvider<Terrain3DComponent> {
   );
 
   @override
-  void build(RenderProviderContext ctx, Entity entity, Terrain3DComponent t, RenderProviderOutput out) {
+  void build(
+    RenderProviderContext ctx,
+    Entity entity,
+    Terrain3DComponent t,
+    RenderProviderOutput out,
+  ) {
     t.link(_files);
     final data = t.loaded;
     if (data == null) return;
@@ -50,11 +56,20 @@ final class TerrainRenderProvider extends RenderProvider<Terrain3DComponent> {
     }
     _library = ctx.shapes.library;
     final layered = t.material.isEmpty ? null : _library?.gpuOf(t.material);
-    final material = layered ?? (_plain ??= ctx.uploader.material(const MaterialData(metallic: 0, roughness: 0.95)));
+    final material =
+        layered ??
+        (_plain ??= ctx.uploader.material(
+          const Material3DData(metallic: 0, roughness: 0.95),
+        ));
     final cells = t.chunkCells.clamp(8, 128);
     final perSide = TerrainMesher.chunksPerSide(data.resolution, cells);
     final cache = _chunks[data] ??= {};
-    final mode = (layered != null, t.size, cells, Object.hashAll([for (final c in t.colors) c.toARGB32()]));
+    final mode = (
+      layered != null,
+      t.size,
+      cells,
+      Object.hashAll([for (final c in t.colors) c.toARGB32()]),
+    );
     for (var cz = 0; cz < perSide; cz++) {
       for (var cx = 0; cx < perSide; cx++) {
         final key = (mode, chunkRevision(data, cx, cz, cells));
@@ -74,11 +89,19 @@ final class TerrainRenderProvider extends RenderProvider<Terrain3DComponent> {
           primitive = mesh.triangleCount == 0
               ? null
               : ctx.uploader.uploadPrimitive(
-                  PrimitiveData(vertices: mesh.vertices, indices: mesh.indices, material: 0, bounds: mesh.bounds, hasTangents: false),
+                  PrimitiveData(
+                    vertices: mesh.vertices,
+                    indices: mesh.indices,
+                    material: 0,
+                    bounds: mesh.bounds,
+                    hasTangents: false,
+                  ),
                 );
           cache[(cx, cz)] = (key, primitive);
         }
-        if (primitive != null) out.addMesh(primitive, material, castShadows: t.castShadows);
+        if (primitive != null) {
+          out.addMesh(primitive, material, castShadows: t.castShadows);
+        }
       }
     }
     // Bigger chunks than before: the pieces past the new last ones go.

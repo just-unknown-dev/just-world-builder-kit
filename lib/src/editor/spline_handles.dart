@@ -3,8 +3,8 @@ import 'dart:ui';
 import 'package:just_editor_core/just_editor_core.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
-import '../splines/spline_components.dart';
-import '../splines/spline_path.dart';
+import '../splines/splines.dart';
+import 'tool_parts.dart';
 
 /// A selected [Spline3DComponent]'s points to drag along the ground (Ctrl, Cmd on
 /// macOS, snaps to the grid), each with a diamond a metre above it to raise or lower it.
@@ -28,10 +28,8 @@ final class SplineHandles extends ViewportHandles {
     final spline = entity.getComponent<Spline3DComponent>();
     final transform = entity.getComponent<TransformComponent>();
     if (spline == null || transform == null) return const [];
-    final world = Matrix4.identity();
-    transform.localToWorldInto(world);
-    final inverse = Matrix4.identity();
-    if (inverse.copyInverse(world) == 0) return const [];
+    final (world, inverse) = spaceOf(entity);
+    if (world.determinant() == 0) return const [];
 
     Vector3 toWorld(Vector3 local) {
       final out = Vector3.zero();
@@ -76,7 +74,9 @@ final class SplineHandles extends ViewportHandles {
               replace((all) => all[i].position = p);
             },
             onClick: (click) {
-              if (click.alt && spline.points.length > 2 && i < spline.points.length) {
+              if (click.alt &&
+                  spline.points.length > 2 &&
+                  i < spline.points.length) {
                 replace((all) => all.removeAt(i));
               }
             },
@@ -108,13 +108,27 @@ final class SplineHandles extends ViewportHandles {
       final mids = SplinePath.of(spline, perSegment: 2).positions;
       final stretches = spline.closed && n >= 3 ? n : n - 1;
       for (var s = 0; s < stretches && 2 * s + 1 < mids.length; s++) {
-        handles.add(_insert(spline, s + 1, mids[2 * s + 1], toWorld, onGround, replace));
+        handles.add(
+          _insert(spline, s + 1, mids[2 * s + 1], toWorld, onGround, replace),
+        );
       }
       if (!spline.closed) {
         final last = points[n - 1].position, before = points[n - 2].position;
         final way = last - before;
-        final step = way.length < 1e-6 ? Vector3(2, 0, 0) : (way..normalize()) * 2;
-        handles.add(_insert(spline, n, last + step, toWorld, onGround, replace, tip: 'Click or drag to go on from here'));
+        final step = way.length < 1e-6
+            ? Vector3(2, 0, 0)
+            : (way..normalize()) * 2;
+        handles.add(
+          _insert(
+            spline,
+            n,
+            last + step,
+            toWorld,
+            onGround,
+            replace,
+            tip: 'Click or drag to go on from here',
+          ),
+        );
       }
     }
     return handles;
@@ -134,7 +148,12 @@ final class SplineHandles extends ViewportHandles {
     void add() {
       if (added) return;
       added = true;
-      replace((all) => all.insert(index.clamp(0, all.length), SplinePoint(position: Vector3.copy(local))));
+      replace(
+        (all) => all.insert(
+          index.clamp(0, all.length),
+          SplinePoint(position: Vector3.copy(local)),
+        ),
+      );
     }
 
     return ViewportHandle(
@@ -145,7 +164,9 @@ final class SplineHandles extends ViewportHandles {
       onDrag: (drag) {
         add();
         final p = onGround(drag);
-        if (p != null && index < spline.points.length) replace((all) => all[index].position = p);
+        if (p != null && index < spline.points.length) {
+          replace((all) => all[index].position = p);
+        }
       },
       onClick: (_) => add(),
     );
@@ -164,9 +185,14 @@ final class SplineHandles extends ViewportHandles {
     // An automatic handle is shown where the curve would put it.
     Vector3 shown(bool out) {
       final own = out ? point.outTangent : point.inTangent;
-      if (point.mode != SplineTangentMode.auto && own.lengthSquared > 0) return own;
-      final before = spline.points[i == 0 ? (spline.closed ? n - 1 : 0) : i - 1].position;
-      final after = spline.points[i == n - 1 ? (spline.closed ? 0 : n - 1) : i + 1].position;
+      if (point.mode != SplineTangentMode.auto && own.lengthSquared > 0) {
+        return own;
+      }
+      final before =
+          spline.points[i == 0 ? (spline.closed ? n - 1 : 0) : i - 1].position;
+      final after = spline
+          .points[i == n - 1 ? (spline.closed ? 0 : n - 1) : i + 1]
+          .position;
       final t = (after - before) / 6;
       return out ? t : -t;
     }
@@ -174,7 +200,9 @@ final class SplineHandles extends ViewportHandles {
     ViewportHandle one(bool out) => ViewportHandle(
       position: toWorld(point.position + shown(out)),
       component: spline,
-      tooltip: out ? 'Drag to shape the curve leaving this point' : 'Drag to shape the curve reaching this point',
+      tooltip: out
+          ? 'Drag to shape the curve leaving this point'
+          : 'Drag to shape the curve reaching this point',
       onDrag: (drag) {
         final p = onGround(drag);
         if (p == null || i >= spline.points.length) return;
@@ -182,7 +210,9 @@ final class SplineHandles extends ViewportHandles {
           final q = all[i];
           final handle = p - q.position;
           final other = out ? q.inTangent : q.outTangent;
-          final otherLength = other.lengthSquared > 0 ? other.length : handle.length;
+          final otherLength = other.lengthSquared > 0
+              ? other.length
+              : handle.length;
           if (q.mode == SplineTangentMode.auto) {
             q.mode = SplineTangentMode.aligned;
           }
@@ -203,7 +233,10 @@ final class SplineHandles extends ViewportHandles {
       },
     );
 
-    return [if (i > 0 || spline.closed) one(false), if (i < n - 1 || spline.closed) one(true)];
+    return [
+      if (i > 0 || spline.closed) one(false),
+      if (i < n - 1 || spline.closed) one(true),
+    ];
   }
 }
 
@@ -234,14 +267,20 @@ final class SplinesOverlay extends ViewportOverlay {
     final dot = Paint()..color = const Color(0xFF4DD0E1);
     final world = Matrix4.identity();
     final at = Vector3.zero();
-    for (final entity in context.world.query([Spline3DComponent, TransformComponent])) {
+    for (final entity in context.world.query([
+      Spline3DComponent,
+      TransformComponent,
+    ])) {
       if (!context.isShown(entity)) continue;
       final spline = entity.getComponent<Spline3DComponent>()!;
       final key = spline.shapeKey;
       final known = _samples[spline];
       final samples = known != null && known.$1 == key
           ? known.$2
-          : (_samples[spline] = (key, SplinePath.of(spline, perSegment: 12).positions)).$2;
+          : (_samples[spline] = (
+              key,
+              SplinePath.of(spline, perSegment: 12).positions,
+            )).$2;
       entity.getComponent<TransformComponent>()!.localToWorldInto(world);
       final selected = context.isSelected(entity);
       Offset? last;

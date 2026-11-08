@@ -81,16 +81,23 @@ abstract final class TerrainBrush {
   static (int, int, int, int)? apply(TerrainData data, TerrainDab dab) {
     final n = data.resolution;
     final r = math.max(dab.radius, 0.5);
-    final i0 = math.max(0, (dab.x - r).floor()), i1 = math.min(n - 1, (dab.x + r).ceil());
-    final j0 = math.max(0, (dab.z - r).floor()), j1 = math.min(n - 1, (dab.z + r).ceil());
+    final i0 = math.max(0, (dab.x - r).floor()),
+        i1 = math.min(n - 1, (dab.x + r).ceil());
+    final j0 = math.max(0, (dab.z - r).floor()),
+        j1 = math.min(n - 1, (dab.z + r).ceil());
     if (i0 > i1 || j0 > j1) return null;
     final rate = dab.strength * dab.seconds;
     // Smoothing reads the heights as they were before this dab.
-    final before = dab.mode == TerrainBrushMode.smooth ? _region(data, i0 - 1, j0 - 1, i1 + 1, j1 + 1) : null;
+    final before = dab.mode == TerrainBrushMode.smooth
+        ? _region(data, i0 - 1, j0 - 1, i1 + 1, j1 + 1)
+        : null;
     var touched = false;
     for (var j = j0; j <= j1; j++) {
       for (var i = i0; i <= i1; i++) {
-        final w = falloff(math.sqrt((i - dab.x) * (i - dab.x) + (j - dab.z) * (j - dab.z)), r);
+        final w = falloff(
+          math.sqrt((i - dab.x) * (i - dab.x) + (j - dab.z) * (j - dab.z)),
+          r,
+        );
         if (w <= 0) continue;
         final k = data.index(i, j);
         touched = true;
@@ -107,9 +114,11 @@ abstract final class TerrainBrush {
               }
             }
             final mean = sum / 9;
-            data.heights[k] += (mean - data.heights[k]) * math.min(1.0, rate * 4 * w);
+            data.heights[k] +=
+                (mean - data.heights[k]) * math.min(1.0, rate * 4 * w);
           case TerrainBrushMode.flatten:
-            data.heights[k] += (dab.target - data.heights[k]) * math.min(1.0, rate * 4 * w);
+            data.heights[k] +=
+                (dab.target - data.heights[k]) * math.min(1.0, rate * 4 * w);
           case TerrainBrushMode.noise:
             data.heights[k] += (_noise(i, j) - 0.5) * 2 * rate * w;
           case TerrainBrushMode.paint:

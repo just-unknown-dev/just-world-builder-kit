@@ -2,19 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:just_editor_core/just_editor_core.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
-import '../scatter/scatter_components.dart';
-import 'scatter_tools.dart' show removeScatterLayer, scatterCollisionLabel, scatterCounts;
+import '../scatter/scatter.dart';
+import 'scatter_tools.dart'
+    show removeScatterLayer, scatterCollisionLabel, scatterCounts;
 
 /// The inspector's editor for a [Scatter3DComponent]'s layers: a card for each —
 /// its colour, name and pieces on top, its settings inside — and Add a
 /// layer. Each change is one undo step of the field.
-Widget scatterLayersEditor(FieldEditorContext context) => _ScatterLayersEditor(context: context);
+Widget scatterLayersEditor(FieldEditorContext context) =>
+    _ScatterLayersEditor(context: context);
 
 /// The inspector's row for a [Scatter3DComponent]'s pieces: how many of each
 /// layer, and Clear.
 Widget scatterInstancesEditor(FieldEditorContext context) {
-  final pieces = [for (final p in (context.value as List?) ?? const []) if (p is ScatterInstance) p];
-  final scatter = context.component is Scatter3DComponent ? context.component as Scatter3DComponent : null;
+  final pieces = [
+    for (final p in (context.value as List?) ?? const [])
+      if (p is ScatterInstance) p,
+  ];
+  final scatter = context.component is Scatter3DComponent
+      ? context.component as Scatter3DComponent
+      : null;
   final layers = scatter?.layers ?? const <ScatterLayer>[];
   final counts = List<int>.filled(layers.length, 0);
   for (final p in pieces) {
@@ -27,9 +34,11 @@ Widget scatterInstancesEditor(FieldEditorContext context) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      ReadonlyRow(
+      ReadonlyFieldRow(
         label: context.label,
-        value: pieces.isEmpty ? 'None yet — paint them with the Scatter brush' : '${pieces.length}: ${each.join(', ')}',
+        value: pieces.isEmpty
+            ? 'None yet — paint them with the Scatter brush'
+            : '${pieces.length}: ${each.join(', ')}',
       ),
       if (pieces.isNotEmpty && !context.readOnly)
         Align(
@@ -71,7 +80,10 @@ class _ScatterLayersEditorState extends State<_ScatterLayersEditor> {
 
   FieldEditorContext get _c => widget.context;
 
-  List<ScatterLayer> get _layers => [for (final l in (_c.value as List?) ?? const []) if (l is ScatterLayer) l];
+  List<ScatterLayer> get _layers => [
+    for (final l in (_c.value as List?) ?? const [])
+      if (l is ScatterLayer) l,
+  ];
 
   /// The layers with layer [i] changed by [change], written back.
   void _change(int i, void Function(ScatterLayer layer) change) {
@@ -103,7 +115,12 @@ class _ScatterLayersEditorState extends State<_ScatterLayersEditor> {
       child: _c.editors.build(
         FieldEditorContext(
           field: field,
-          hint: FieldHint(label: label ?? name, description: description, scrub: scrub, fileExtensions: fileExtensions),
+          hint: FieldHint(
+            label: label ?? name,
+            description: description,
+            scrub: scrub,
+            fileExtensions: fileExtensions,
+          ),
           value: value,
           component: _c.component,
           onChanged: (v) => _change(i, (l) => write(l, v)),
@@ -123,8 +140,12 @@ class _ScatterLayersEditorState extends State<_ScatterLayersEditor> {
   @override
   Widget build(BuildContext context) {
     final layers = _layers;
-    final scatter = _c.component is Scatter3DComponent ? _c.component as Scatter3DComponent : null;
-    final counts = scatter == null ? List<int>.filled(layers.length, 0) : scatterCounts(scatter);
+    final scatter = _c.component is Scatter3DComponent
+        ? _c.component as Scatter3DComponent
+        : null;
+    final counts = scatter == null
+        ? List<int>.filled(layers.length, 0)
+        : scatterCounts(scatter);
     const metres = ScrubHint(step: 0.1, fractionDigits: 1, suffix: 'm');
     const times = ScrubHint(step: 0.05, fractionDigits: 2, suffix: '×');
     return Column(
@@ -143,25 +164,45 @@ class _ScatterLayersEditorState extends State<_ScatterLayersEditor> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 InkWell(
-                  onTap: () => setState(() => _open.contains(i) ? _open.remove(i) : _open.add(i)),
+                  onTap: () => setState(
+                    () => _open.contains(i) ? _open.remove(i) : _open.add(i),
+                  ),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                     child: Row(
                       children: [
-                        Icon(_open.contains(i) ? Icons.expand_more : Icons.chevron_right, size: 16, color: EditorTheme.textSecondary),
+                        Icon(
+                          _open.contains(i)
+                              ? Icons.expand_more
+                              : Icons.chevron_right,
+                          size: 16,
+                          color: EditorTheme.textSecondary,
+                        ),
                         const SizedBox(width: 4),
                         Container(
                           width: 10,
                           height: 10,
-                          decoration: BoxDecoration(color: l.color, shape: BoxShape.circle),
+                          decoration: BoxDecoration(
+                            color: l.color,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: Text(l.name, style: InspectorField.valueStyle, overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            l.name,
+                            style: InspectorField.valueStyle,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         Text(
                           '${i < counts.length ? counts[i] : 0} pieces · ${scatterCollisionLabel(l.collision).toLowerCase()}',
-                          style: InspectorField.valueStyle.copyWith(color: EditorTheme.textMuted),
+                          style: InspectorField.valueStyle.copyWith(
+                            color: EditorTheme.textMuted,
+                          ),
                         ),
                         if (!_c.readOnly && _c.scope != null && scatter != null)
                           EditorIconButton(
@@ -169,7 +210,8 @@ class _ScatterLayersEditorState extends State<_ScatterLayersEditor> {
                             tooltip: 'Remove this layer and its pieces',
                             // The pieces too: the layers after it move up one,
                             // and their pieces with them.
-                            onTap: () => removeScatterLayer(_c.scope!, scatter, i),
+                            onTap: () =>
+                                removeScatterLayer(_c.scope!, scatter, i),
                           ),
                       ],
                     ),
@@ -181,38 +223,152 @@ class _ScatterLayersEditorState extends State<_ScatterLayersEditor> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _row(i, 'name', FieldTypes.text, l.name, (x, v) => x.name = '$v', label: 'Name'),
-                        _row(i, 'model', FieldTypes.assetRef, l.model, (x, v) => x.model = v as String? ?? '',
-                            label: 'Model', description: 'What each piece shows; empty for the shape below, in its colour.', fileExtensions: const ['glb', 'gltf']),
+                        _row(
+                          i,
+                          'name',
+                          FieldTypes.text,
+                          l.name,
+                          (x, v) => x.name = '$v',
+                          label: 'Name',
+                        ),
+                        _row(
+                          i,
+                          'model',
+                          FieldTypes.assetRef,
+                          l.model,
+                          (x, v) => x.model = v as String? ?? '',
+                          label: 'Model',
+                          description:
+                              'What each piece shows; empty for the shape below, in its colour.',
+                          fileExtensions: const ['glb', 'gltf'],
+                        ),
                         if (l.model.isEmpty)
-                          _row(i, 'shape', _shape, l.shape, (x, v) => x.shape = v as ScatterShape,
-                              label: 'Shape', description: 'What each piece is without a model.'),
-                        _row(i, 'color', FieldTypes.color, l.color, (x, v) => x.color = v as Color, label: 'Colour'),
-                        _row(i, 'spacing', FieldTypes.decimal, l.spacing, (x, v) => x.spacing = _num(v, x.spacing).clamp(0.05, 100.0),
-                            label: 'Spacing', description: 'The least distance between two of its pieces.', scrub: metres),
-                        _row(i, 'minScale', FieldTypes.decimal, l.minScale, (x, v) {
-                          x.minScale = _num(v, x.minScale).clamp(0.01, 100.0);
-                          if (x.maxScale < x.minScale) x.maxScale = x.minScale;
-                        }, label: 'Smallest', scrub: times),
-                        _row(i, 'maxScale', FieldTypes.decimal, l.maxScale, (x, v) {
-                          x.maxScale = _num(v, x.maxScale).clamp(0.01, 100.0);
-                          if (x.minScale > x.maxScale) x.minScale = x.maxScale;
-                        }, label: 'Largest', scrub: times),
-                        _row(i, 'randomYaw', FieldTypes.boolean, l.randomYaw, (x, v) => x.randomYaw = v == true, label: 'Turned at random'),
-                        _row(i, 'alignToNormal', FieldTypes.boolean, l.alignToNormal, (x, v) => x.alignToNormal = v == true,
-                            label: 'Lean with the ground'),
-                        _row(i, 'maxDistance', FieldTypes.decimal, l.maxDistance, (x, v) => x.maxDistance = _num(v, x.maxDistance).clamp(0.0, 10000.0),
-                            label: 'Reach', description: 'Not drawn beyond this far from the camera; 0 for always.',
-                            scrub: const ScrubHint(step: 1, fractionDigits: 0, suffix: 'm')),
-                        _row(i, 'collision', _collision, l.collision, (x, v) => x.collision = v as ScatterCollision,
-                            label: 'Solid', description: 'Whether the player bumps into its pieces, and as what.'),
+                          _row(
+                            i,
+                            'shape',
+                            _shape,
+                            l.shape,
+                            (x, v) => x.shape = v as ScatterShape,
+                            label: 'Shape',
+                            description: 'What each piece is without a model.',
+                          ),
+                        _row(
+                          i,
+                          'color',
+                          FieldTypes.color,
+                          l.color,
+                          (x, v) => x.color = v as Color,
+                          label: 'Colour',
+                        ),
+                        _row(
+                          i,
+                          'spacing',
+                          FieldTypes.decimal,
+                          l.spacing,
+                          (x, v) =>
+                              x.spacing = _num(v, x.spacing).clamp(0.05, 100.0),
+                          label: 'Spacing',
+                          description:
+                              'The least distance between two of its pieces.',
+                          scrub: metres,
+                        ),
+                        _row(
+                          i,
+                          'minScale',
+                          FieldTypes.decimal,
+                          l.minScale,
+                          (x, v) {
+                            x.minScale = _num(v, x.minScale).clamp(0.01, 100.0);
+                            if (x.maxScale < x.minScale) {
+                              x.maxScale = x.minScale;
+                            }
+                          },
+                          label: 'Smallest',
+                          scrub: times,
+                        ),
+                        _row(
+                          i,
+                          'maxScale',
+                          FieldTypes.decimal,
+                          l.maxScale,
+                          (x, v) {
+                            x.maxScale = _num(v, x.maxScale).clamp(0.01, 100.0);
+                            if (x.minScale > x.maxScale) {
+                              x.minScale = x.maxScale;
+                            }
+                          },
+                          label: 'Largest',
+                          scrub: times,
+                        ),
+                        _row(
+                          i,
+                          'randomYaw',
+                          FieldTypes.boolean,
+                          l.randomYaw,
+                          (x, v) => x.randomYaw = v == true,
+                          label: 'Turned at random',
+                        ),
+                        _row(
+                          i,
+                          'alignToNormal',
+                          FieldTypes.boolean,
+                          l.alignToNormal,
+                          (x, v) => x.alignToNormal = v == true,
+                          label: 'Lean with the ground',
+                        ),
+                        _row(
+                          i,
+                          'maxDistance',
+                          FieldTypes.decimal,
+                          l.maxDistance,
+                          (x, v) => x.maxDistance = _num(
+                            v,
+                            x.maxDistance,
+                          ).clamp(0.0, 10000.0),
+                          label: 'Reach',
+                          description:
+                              'Not drawn beyond this far from the camera; 0 for always.',
+                          scrub: const ScrubHint(
+                            step: 1,
+                            fractionDigits: 0,
+                            suffix: 'm',
+                          ),
+                        ),
+                        _row(
+                          i,
+                          'collision',
+                          _collision,
+                          l.collision,
+                          (x, v) => x.collision = v as ScatterCollision,
+                          label: 'Solid',
+                          description:
+                              'Whether the player bumps into its pieces, and as what.',
+                        ),
                         if (l.collision != ScatterCollision.none) ...[
-                          _row(i, 'colliderRadius', FieldTypes.decimal, l.colliderRadius,
-                              (x, v) => x.colliderRadius = _num(v, x.colliderRadius).clamp(0.01, 50.0),
-                              label: 'Solid radius', scrub: metres),
-                          _row(i, 'colliderHeight', FieldTypes.decimal, l.colliderHeight,
-                              (x, v) => x.colliderHeight = _num(v, x.colliderHeight).clamp(0.01, 100.0),
-                              label: 'Solid height', scrub: metres),
+                          _row(
+                            i,
+                            'colliderRadius',
+                            FieldTypes.decimal,
+                            l.colliderRadius,
+                            (x, v) => x.colliderRadius = _num(
+                              v,
+                              x.colliderRadius,
+                            ).clamp(0.01, 50.0),
+                            label: 'Solid radius',
+                            scrub: metres,
+                          ),
+                          _row(
+                            i,
+                            'colliderHeight',
+                            FieldTypes.decimal,
+                            l.colliderHeight,
+                            (x, v) => x.colliderHeight = _num(
+                              v,
+                              x.colliderHeight,
+                            ).clamp(0.01, 100.0),
+                            label: 'Solid height',
+                            scrub: metres,
+                          ),
                         ],
                       ],
                     ),
@@ -228,7 +384,10 @@ class _ScatterLayersEditorState extends State<_ScatterLayersEditor> {
               icon: Icons.add,
               kind: EditorButtonKind.ghost,
               onPressed: () {
-                _c.onChanged([for (final x in layers) x.copy(), ScatterLayer(name: 'Layer ${layers.length + 1}')]);
+                _c.onChanged([
+                  for (final x in layers) x.copy(),
+                  ScatterLayer(name: 'Layer ${layers.length + 1}'),
+                ]);
                 setState(() => _open.add(layers.length));
               },
             ),

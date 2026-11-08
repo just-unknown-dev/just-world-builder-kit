@@ -13,17 +13,22 @@ abstract final class GridOrientations {
   static const int count = 24;
 
   static final List<List<int>> _matrices = _build();
-  static final List<Quaternion> _turns = [for (final m in _matrices) _quaternionOf(m)];
+  static final List<Quaternion> _turns = [
+    for (final m in _matrices) _quaternionOf(m),
+  ];
   static final List<List<int>> _byAxis = [
-    for (var axis = 0; axis < 3; axis++) [for (var i = 0; i < count; i++) _after(i, axis)],
+    for (var axis = 0; axis < 3; axis++)
+      [for (var i = 0; i < count; i++) _after(i, axis)],
   ];
 
   /// Orientation [index] as a turn.
-  static Quaternion of(int index) => Quaternion.copy(_turns[index.clamp(0, count - 1)]);
+  static Quaternion of(int index) =>
+      Quaternion.copy(_turns[index.clamp(0, count - 1)]);
 
   /// Orientation [index] as a matrix, row by row: whole numbers, -1, 0 or
   /// 1.
-  static List<int> matrixOf(int index) => List.unmodifiable(_matrices[index.clamp(0, count - 1)]);
+  static List<int> matrixOf(int index) =>
+      List.unmodifiable(_matrices[index.clamp(0, count - 1)]);
 
   /// [index] turned a further quarter turn about [axis] (0 X, 1 Y, 2 Z) of
   /// the cell, [steps] times (negative for the other way).
@@ -57,7 +62,12 @@ abstract final class GridOrientations {
     ];
     return [
       for (final tilt in tilts)
-        for (var spin = 0; spin < 4; spin++) _matrixOf(Quaternion.copy(tilt)..multiply(Quaternion.axisAngle(Vector3(0, 1, 0), spin * math.pi / 2))),
+        for (var spin = 0; spin < 4; spin++)
+          _matrixOf(
+            Quaternion.copy(tilt)..multiply(
+              Quaternion.axisAngle(Vector3(0, 1, 0), spin * math.pi / 2),
+            ),
+          ),
     ];
   }
 
@@ -69,9 +79,15 @@ abstract final class GridOrientations {
     }
     int r(double v) => v.round();
     return [
-      r(columns[0].x), r(columns[1].x), r(columns[2].x),
-      r(columns[0].y), r(columns[1].y), r(columns[2].y),
-      r(columns[0].z), r(columns[1].z), r(columns[2].z),
+      r(columns[0].x),
+      r(columns[1].x),
+      r(columns[2].x),
+      r(columns[0].y),
+      r(columns[1].y),
+      r(columns[2].y),
+      r(columns[0].z),
+      r(columns[1].z),
+      r(columns[2].z),
     ];
   }
 

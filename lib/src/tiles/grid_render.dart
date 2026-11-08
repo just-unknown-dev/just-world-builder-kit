@@ -2,13 +2,15 @@ import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
 import 'grid_orientations.dart';
-import 'grid_tiles.dart';
+import 'grid_tiles_3d_component.dart';
+import 'mesh_libraries.dart';
 import 'mesh_library.dart';
 
 /// Draws a [GridTiles3DComponent]: each item's tiles in batches, one per item for
 /// each block of [chunkCells]³ cells, so blocks out of sight are skipped.
 /// Built again when its cells, its library or a model it shows changes.
-final class GridTilesRenderProvider extends RenderProvider<GridTiles3DComponent> {
+final class GridTilesRenderProvider
+    extends RenderProvider<GridTiles3DComponent> {
   GridTilesRenderProvider(this.context);
 
   /// The engine the libraries are loaded for.
@@ -44,13 +46,21 @@ final class GridTilesRenderProvider extends RenderProvider<GridTiles3DComponent>
   }
 
   @override
-  void build(RenderProviderContext ctx, Entity entity, GridTiles3DComponent c, RenderProviderOutput out) {
+  void build(
+    RenderProviderContext ctx,
+    Entity entity,
+    GridTiles3DComponent c,
+    RenderProviderOutput out,
+  ) {
     _models = ctx.models;
     c.link(_libraries);
     final library = c.loaded;
     if (library == null || c.cells.isEmpty) return;
     final reach = c.maxDistance <= 0 ? double.infinity : c.maxDistance;
-    for (final MapEntry(key: item, value: places) in placements(c, library).entries) {
+    for (final MapEntry(key: item, value: places) in placements(
+      c,
+      library,
+    ).entries) {
       final piece = library.item(item);
       if (piece == null) continue;
       final parts = _partsOf(ctx, c.library, piece);
@@ -70,11 +80,18 @@ final class GridTilesRenderProvider extends RenderProvider<GridTiles3DComponent>
 
   /// What [item], of the library at [path], draws: its model's parts, or
   /// its shape.
-  List<(GpuPrimitive, GpuMaterial, Matrix4?)> _partsOf(RenderProviderContext ctx, String path, MeshLibraryItem item) {
+  List<(GpuPrimitive, GpuMaterial, Matrix4?)> _partsOf(
+    RenderProviderContext ctx,
+    String path,
+    MeshLibraryItem item,
+  ) {
     if (item.model.isNotEmpty) {
       final model = ctx.models.get(item.model);
       if (model == null) return const [];
-      return [for (final part in RenderScene().addModel(model, Matrix4.identity())) (part.primitive, part.material, part.world)];
+      return [
+        for (final part in Render3DScene().addModel(model, Matrix4.identity()))
+          (part.primitive, part.material, part.world),
+      ];
     }
     final shape = _libraries.shapeOf(path, item);
     if (shape == null) return const [];
@@ -85,7 +102,10 @@ final class GridTilesRenderProvider extends RenderProvider<GridTiles3DComponent>
 
   /// Where each of [c]'s tiles goes, in its entity's space: by item, then
   /// by block of cells.
-  static Map<int, Map<int, List<Matrix4>>> placements(GridTiles3DComponent c, MeshLibrary library) {
+  static Map<int, Map<int, List<Matrix4>>> placements(
+    GridTiles3DComponent c,
+    MeshLibrary library,
+  ) {
     final size = library.cellSize;
     final out = <int, Map<int, List<Matrix4>>>{};
     // By id, once: not a search of the items for every cell.
@@ -100,14 +120,27 @@ final class GridTilesRenderProvider extends RenderProvider<GridTiles3DComponent>
         (cell.y / chunkCells).floor(),
         (cell.z / chunkCells).floor(),
       );
-      ((out[tile.item] ??= {})[block] ??= []).add(matrixOf(cell, tile.orientation, item, size));
+      ((out[tile.item] ??= {})[block] ??= []).add(
+        matrixOf(cell, tile.orientation, item, size),
+      );
     }
     return out;
   }
 
   /// Where a tile of [item] in [cell], turned [orientation], is drawn.
-  static Matrix4 matrixOf(GridCell cell, int orientation, MeshLibraryItem item, double cellSize) {
-    final at = GridTiles3DComponent.centreOf(cell.x, cell.y, cell.z, cellSize) + GridOrientations.apply(orientation, item.offset);
-    return Matrix4.identity()..setFromTrs(at, GridOrientations.of(orientation), Vector3(item.scale, item.scale, item.scale));
+  static Matrix4 matrixOf(
+    GridCell cell,
+    int orientation,
+    MeshLibraryItem item,
+    double cellSize,
+  ) {
+    final at =
+        GridTiles3DComponent.centreOf(cell.x, cell.y, cell.z, cellSize) +
+        GridOrientations.apply(orientation, item.offset);
+    return Matrix4.identity()..setFromTrs(
+      at,
+      GridOrientations.of(orientation),
+      Vector3(item.scale, item.scale, item.scale),
+    );
   }
 }

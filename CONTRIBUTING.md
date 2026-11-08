@@ -76,7 +76,7 @@ If you're working from the Just engine monorepo, run every command from `plugins
 
 ## Working Against Unpublished Dependencies
 
-The package depends on four just_* packages: `just_game_engine`, `just_deflate`, `just_editor_core` and, for its tests, `just_game_engine_editor`. When a change needs an unreleased version of one of them, check it out next to this repository and point this package at it with a `pubspec_overrides.yaml` in the repository root:
+The package depends on `just_game_engine`, `just_deflate`, `just_signals` and `just_editor_core`, and its tests on `just_game_engine_editor` and `just_graphics_engine`. When a change needs an unreleased version of one of them, check it out next to this repository and point this package at it with a `pubspec_overrides.yaml` in the repository root:
 
 ```yaml
 # pubspec_overrides.yaml: local only, never commit it.
@@ -101,23 +101,25 @@ The third-person template depends on this package. Its game adds `WorldBuilderKi
 
 | Path | Contents |
 |------|----------|
-| `lib/just_world_builder_kit.dart` | The runtime library, safe in a release build on every platform, the web included |
-| `lib/src/world_builder_kit.dart` | `WorldBuilderKit`: the extension, the systems and `ready` |
-| `lib/src/splines/` | `Spline3DComponent`, `SplineSweep3DComponent`, `SplineInstances3DComponent`, `PathFollower3DComponent`; `SplinePath` (sampling, frames); `SplineSweeper` (the swept mesh); their definitions, render providers and systems |
-| `lib/src/tiles/` | `GridTiles3DComponent` and its packed cells; `GridOrientations` (the 24 turns); `MeshLibrary` (the `.meshlib.json` format) and `MeshLibraries` (what one engine has loaded); `GridTileSolids`; the render provider |
-| `lib/src/terrain/` | `TerrainData` (the `.jterrain` format), `TerrainBrush`, `TerrainMesher`, `Terrain3DComponent` and `TerrainFiles` (what one engine has loaded); the render provider and link system |
-| `lib/src/scatter/` | `Scatter3DComponent`, its layers and packed pieces; `ScatterSpacing`, `ScatterBrush`; the render provider |
-| `lib/editor.dart`, `lib/src/editor/` | Design time only: `WorldBuilderModule`; the Block, Floor, Ramp, Spline, Tiles, Terrain and Scatter tools; spline handles and overlay; the Tiles, Terrain and Scatter panels; the mesh library workspace; the inspector editors; `WorldBuilderRayTest` (picking the kit's pieces) |
+| `lib/just_world_builder_kit.dart` | The runtime library, safe in a release build on every platform, the web included: it exports the barrels of `kit/`, `splines/`, `terrain/`, `tiles/` and `scatter/` |
+| `lib/src/splines/` | `Spline3DComponent`, `SplineSweep3DComponent`, `SplineInstances3DComponent`, `PathFollower3DComponent`; `SplinePath` (sampling, frames); `SplineSweeper` (the swept mesh); `Spline3DDefinitions`, the render providers, `PathFollower3DSystem` and `Spline3DLinkSystem` |
+| `lib/src/terrain/` | `TerrainData` (the `.jterrain` format), `TerrainBrush`, `TerrainMesher`, `Terrain3DComponent`, `TerrainFiles` (what one engine has loaded); `Terrain3DDefinitions`, the render provider and `Terrain3DLinkSystem` |
+| `lib/src/tiles/` | `GridTiles3DComponent` and `GridCellsFieldType` (its packed cells); `GridOrientations` (the 24 turns); `MeshLibrary` (the `.meshlib.json` format) and `MeshLibraries` (what one engine has loaded); `GridTileSolids`; `GridTiles3DDefinitions`, the render provider and `GridTiles3DLinkSystem` |
+| `lib/src/scatter/` | `Scatter3DComponent`, its layers and packed pieces; `ScatterSpacing`, `ScatterBrush`; `Scatter3DDefinitions` and the render provider |
+| `lib/src/kit/` | `WorldBuilderKit` (the extension, the systems and `ready`) and `WorldBuilderMigrations` (the renamed components) |
+| `lib/editor.dart`, `lib/src/editor/` | Design time only: `WorldBuilderModule` and `WorldBuilderFiles`; the Block, Floor, Ramp, Spline, Tiles, Terrain and Scatter tools; spline handles and overlay; the Tiles, Terrain and Scatter panels; the mesh library workspace; the inspector editors; `WorldBuilderRayTest` (picking the kit's pieces). `panel_parts.dart` and `tool_parts.dart` are internal |
 | `just_store.json` | The Asset Store manifest: the extension and module a game registers, the component types the kit adds, the setup code shown after installing it, and the editor-only libraries. The `just` CLI's release check reads that last list |
-| `test/` | One file per piece (`splines_test.dart`, `spline_render_test.dart`, `tiles_test.dart`, `terrain_test.dart`, `scatter_test.dart`), `blockout_test.dart` (blockout, and the library boundary) and `panels_test.dart` (the side panel's sections) |
+| `test/` | Mirrors `lib/src/`: `test/splines/`, `test/terrain/`, `test/tiles/`, `test/scatter/`, `test/kit/` and `test/editor/`, one file per thing tested; `test/library_layout_test.dart` (the layout, the layers and the release split) and `test/store_manifest_test.dart` |
+
+**Layout.** `lib/src/` holds one folder per feature, and each folder one barrel named after it (`terrain/terrain.dart`) that exports the whole folder; the public libraries export only barrels. Within a folder, files import each other directly; across folders, a file imports the other folder's barrel. The layers, bottom to top: the pieces (`splines`, `terrain`, `tiles`, `scatter`, which never import each other), then `kit`, then `editor`. A file no barrel exports marks every public declaration `@internal`. `test/library_layout_test.dart` checks all of it.
 
 A few rules hold the package together. Keep them:
 
-- **The runtime never reaches the editor.** Nothing that `lib/just_world_builder_kit.dart` reaches imports `dart:io`, `just_editor_core`, `just_game_engine_editor` or a file under `lib/src/editor/`. Files are read through the engine's seams (`EngineContext.bundle`, `EngineContext.tiles.readText`); the editor module points them at the project. `just_store.json` lists `editor.dart` and `src/editor/` as editor-only; keep it in step. `test/blockout_test.dart` checks the boundary.
+- **The runtime never reaches the editor.** Nothing that `lib/just_world_builder_kit.dart` reaches imports `dart:io`, `just_editor_core`, `just_game_engine_editor` or a file under `lib/src/editor/`. Files are read through the engine's seams (`EngineContext.bundle`, `EngineContext.tiles.readText`); the editor module points them at the project. `just_store.json` lists `editor.dart` and `src/editor/` as editor-only; keep it in step. `test/library_layout_test.dart` checks the boundary.
 - **3-D graphics and physics come through the engine.** The kit imports `package:just_game_engine/just_game_engine_3d.dart` (render providers, and the editor's 3-D tools), never `just_graphics_engine`, `just_physics_engine` or `just_jolt`. A piece is drawn by a `RenderProvider` and is solid as a `SolidShapeSource` that a `Collider3DComponent` set to match its shape reads.
 - **A solid key is its piece's own.** The engine keeps the shapes it builds by `solidKey`, across entities and levels. A key must change whenever the solid shape does and must never equal another piece's unless the shapes are the same: build it from the content, or from a token the instance owns and a revision it bumps. Never from a count every loaded instance shares, nor from `identityHashCode`.
 - **Every saved component has a `ComponentDefinition`** with 3-D hints (`Dimensions.threeD`, group "World Builder"), and its type is listed under `runtime.componentTypes` in `just_store.json`. The definitions are getters, so `WorldBuilderKit.extension`, a `RefreshableExtension`, can rebuild them after a hot reload. Write new ones as getters too.
-- **Saved scenes and files must keep loading.** Never change a definition's `type` or `id`, a field's name, or the meaning of a byte in the packed cells, pieces or `.jterrain` files; a new field needs nothing more, because a scene saved without it loads the constructor's default. Bad data fails with a `FormatException` that says what is wrong, never a `TypeError` or a crash in a system's update.
+- **Saved scenes and files must keep loading.** Never change a definition's `id`, a field's name, or the meaning of a byte in the packed cells, pieces or `.jterrain` files; a new field needs nothing more, because a scene saved without it loads the constructor's default. A component renamed goes in `WorldBuilderMigrations.renamedTypes` (old → new; the older entries stay): the engine applies it to scenes of every format. Bad data fails with a `FormatException` that says what is wrong, never a `TypeError` or a crash in a system's update.
 - **Only settings are saved.** What the systems and providers keep (a sweep's mesh, a follower's progress, a grid's loaded library, revisions) is runtime state and never written to a saved field.
 - **Metres, and up is -Y**, as everywhere in the engine. Heights in a `.jterrain` are measured up.
 - **One undo step per stroke.** A tool's drag — a terrain stroke, a run of tiles, a scatter stroke, a handle dragged — is one entry in the editor's history, and undo puts it back exactly.
@@ -126,30 +128,30 @@ A few rules hold the package together. Keep them:
 
 ## Running the Tests
 
-Run every command from the repository root. `test/blockout_test.dart` reads `lib/` from disk and expects that working directory.
+Run every command from the repository root. `test/library_layout_test.dart` and `test/store_manifest_test.dart` read `lib/`, `pubspec.yaml`, `CHANGELOG.md` and `just_store.json` from disk and expect that working directory.
 
 ```bash
 # The whole suite.
 flutter test
 
 # One file.
-flutter test test/terrain_test.dart
+flutter test test/terrain/terrain_data_test.dart
 ```
 
-**The library boundary.** `test/blockout_test.dart` reads every runtime file under `lib/` and fails if one names `just_editor_core`, `just_game_engine_editor` or `src/editor/`, and checks that the editor part builds on `just_editor_core` alone.
+**The layout and the library boundary.** `test/library_layout_test.dart` reads every file under `lib/`: it fails on a loose file in `lib/src/`, a file neither exported nor `@internal`, an export outside a barrel's own folder, a loop between features or an import of a higher layer, a runtime file that reaches the editor half (`src/editor/`, `just_editor_core`, `just_graphics_engine`, `dart:io`), and an editor file that imports `just_game_engine_editor` rather than building on `just_editor_core` alone. `test/store_manifest_test.dart` keeps `just_store.json` in step with the pubspec, the CHANGELOG and the definitions.
 
-**Writing tests.** There is no shared helper library. For a piece's data, build it by hand and check what it hands on: `solidParts`, a `Collider3DShapes` built from it, `SplinePath` frames, `TerrainMesher.chunk`. For drawing, follow `test/spline_render_test.dart`: an `Engine` with `Graphics3D(device: NullGpuDevice(shaders: rendererNullShaders))` and `renderer.update(view)`. For a tool, follow the `editor` groups: an `EditorScope` with `WorldBuilderModule`, a `LevelDesignerSession` with an `OrbitFlyEditorView`, and presses, moves and releases at world points projected to the screen, then check `scope.history`. A tool that reads or writes files gets a temporary project folder (`WorldBuilderModule(root: ...)`).
+**Writing tests.** There is no shared helper library. For a piece's data, build it by hand and check what it hands on: `solidParts`, a `Collider3DShapes` built from it, `SplinePath` frames, `TerrainMesher.chunk`. For drawing, follow `test/splines/spline_render_test.dart`: an `Engine` with `Graphics3D(device: NullGpuDevice(shaders: rendererNullShaders))` and `renderer.update(view)`. For a tool, follow the tests in `test/editor/`: an `EditorScope` with `WorldBuilderModule`, a `LevelDesignerSession` with an `OrbitFlyEditorView`, and presses, moves and releases at world points projected to the screen, then check `scope.history`. A tool that reads or writes files gets a temporary project folder (`WorldBuilderModule(root: ...)`).
 
 ---
 
 ## Coding Guidelines
 
-- **Formatting.** Format the files you create with `dart format <files>`. Most files in the package are not formatted yet: do not reformat a file you only edit, or put a reformat of a whole file in a commit of its own, so that reviewers can see your change.
+- **Formatting.** The package is formatted: run `dart format lib test` before a commit; `dart format --output=none --set-exit-if-changed lib test` must report nothing.
 - **Analysis.** `flutter analyze` must report no issues at all: no errors, warnings or infos. The rules are in `analysis_options.yaml`: `flutter_lints`, with `build/` excluded.
 - **Documentation.** Give every public API you add a `///` doc comment. Describe user-visible changes in [CHANGELOG.md](CHANGELOG.md), and update [README.md](README.md) if the public API changes.
 - **Tests.** Add or update tests for any behaviour you change. A bug fix comes with a test that fails without it.
 - **Dependencies.** Do not add a dependency without discussing it in an issue first.
-- **Structure.** Runtime code goes in the files under `lib/src/` (outside `lib/src/editor/`) and reaches users through `lib/just_world_builder_kit.dart`; design-time code goes under `lib/src/editor/` and reaches users through `lib/editor.dart`.
+- **Structure.** Runtime code goes in its feature's folder under `lib/src/` (outside `lib/src/editor/`) and reaches users through that folder's barrel and `lib/just_world_builder_kit.dart`; design-time code goes under `lib/src/editor/` and reaches users through `lib/editor.dart`. A new top-level folder takes a barrel and a place in the layers of `test/library_layout_test.dart`.
 
 ---
 

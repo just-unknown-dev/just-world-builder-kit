@@ -54,8 +54,10 @@ final class SplinePoint {
   /// The roll about the spline here (radians).
   double roll;
 
+  /// How its handles move together as one is dragged.
   SplineTangentMode mode;
 
+  /// A copy of it, its vectors its own.
   SplinePoint copy() => SplinePoint(
     position: Vector3.copy(position),
     inTangent: Vector3.copy(inTangent),
@@ -81,8 +83,10 @@ final class SplinePoint {
 
   Map<String, Object?> toJson() => {
     'p': [position.x, position.y, position.z],
-    if (inTangent.lengthSquared > 0) 'in': [inTangent.x, inTangent.y, inTangent.z],
-    if (outTangent.lengthSquared > 0) 'out': [outTangent.x, outTangent.y, outTangent.z],
+    if (inTangent.lengthSquared > 0)
+      'in': [inTangent.x, inTangent.y, inTangent.z],
+    if (outTangent.lengthSquared > 0)
+      'out': [outTangent.x, outTangent.y, outTangent.z],
     if (roll != 0) 'roll': roll,
     if (mode != SplineTangentMode.auto) 'mode': mode.name,
   };
@@ -101,7 +105,9 @@ final class SplinePoint {
       inTangent: _vector(json['in']),
       outTangent: _vector(json['out']),
       roll: (json['roll'] as num?)?.toDouble() ?? 0,
-      mode: SplineTangentMode.values.where((m) => m.name == mode).firstOrNull ?? SplineTangentMode.auto,
+      mode:
+          SplineTangentMode.values.where((m) => m.name == mode).firstOrNull ??
+          SplineTangentMode.auto,
     );
   }
 }
@@ -111,14 +117,19 @@ final class SplinePoint {
 /// ([SplineSweep3DComponent], [SplineInstances3DComponent]) and what follows it
 /// ([PathFollower3DComponent]) read it.
 class Spline3DComponent extends Component {
-  Spline3DComponent({List<SplinePoint>? points, this.closed = false, this.interpolation = SplineInterpolation.catmullRom})
-    : points = points ?? [];
+  Spline3DComponent({
+    List<SplinePoint>? points,
+    this.closed = false,
+    this.interpolation = SplineInterpolation.catmullRom,
+  }) : points = points ?? [];
 
+  /// Its points, in order, in its entity's own space.
   List<SplinePoint> points;
 
   /// Whether it runs on from its last point back to its first.
   bool closed;
 
+  /// How it runs between its points.
   SplineInterpolation interpolation;
 
   /// Equal for as long as its shape stays the same. Read every frame by
@@ -168,6 +179,7 @@ class SplineSweep3DComponent extends Component implements SolidShapeSource {
     this.castShadows = true,
   });
 
+  /// Its cross-section: a road, a wall, a pipe or a rail.
   SweepProfile profile;
 
   /// Across (road, rail) or thick (wall), in metres.
@@ -195,6 +207,7 @@ class SplineSweep3DComponent extends Component implements SolidShapeSource {
   /// How many times a material's maps repeat a metre along it.
   double tiling;
 
+  /// Whether it casts shadows.
   bool castShadows;
 
   /// The spline it was last swept along (its entity's, linked by whoever
@@ -285,12 +298,14 @@ class SplineInstances3DComponent extends Component {
   /// Whether each turns to face along the spline.
   bool alignToPath;
 
+  /// How big each copy is, times its model's size.
   double scale;
 
   /// Beyond how many metres from the camera they are not drawn; 0 for
   /// always.
   double maxDistance;
 
+  /// Whether it casts shadows.
   bool castShadows;
 
   /// The spline they were last laid along (their entity's, linked by
@@ -298,7 +313,14 @@ class SplineInstances3DComponent extends Component {
   Spline3DComponent? spline;
 
   /// Equal while where they go stays the same.
-  Object get layoutKey => Object.hash(spacing, startAt, sideOffset, alignToPath, scale, spline?.shapeKey);
+  Object get layoutKey => Object.hash(
+    spacing,
+    startAt,
+    sideOffset,
+    alignToPath,
+    scale,
+    spline?.shapeKey,
+  );
 }
 
 /// How a [PathFollower3DComponent] goes along its spline.
@@ -332,7 +354,10 @@ class PathFollower3DComponent extends Component {
   /// The entity whose [Spline3DComponent] it follows.
   EntityTarget path;
 
+  /// How fast it goes along the spline, in metres a second.
   double speed;
+
+  /// How it goes along the spline: round, back and forth, or once.
   FollowMode mode;
 
   /// Seconds it rests at each end.

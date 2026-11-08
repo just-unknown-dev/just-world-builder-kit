@@ -6,7 +6,11 @@ import 'scatter_components.dart';
 /// a new one at a spot keeps its distance from them all.
 final class ScatterSpacing {
   /// [instances] of layer [layer], kept [spacing] metres apart.
-  ScatterSpacing(Iterable<ScatterInstance> instances, this.layer, double spacing) : spacing = math.max(spacing, 0.01) {
+  ScatterSpacing(
+    Iterable<ScatterInstance> instances,
+    this.layer,
+    double spacing,
+  ) : spacing = math.max(spacing, 0.01) {
     for (final i in instances) {
       if (i.layer == layer) add(i.position.x, i.position.z);
     }
@@ -16,7 +20,8 @@ final class ScatterSpacing {
   final double spacing;
   final Map<(int, int), List<(double, double)>> _buckets = {};
 
-  (int, int) _bucket(double x, double z) => ((x / spacing).floor(), (z / spacing).floor());
+  (int, int) _bucket(double x, double z) =>
+      ((x / spacing).floor(), (z / spacing).floor());
 
   /// Whether a piece at ([x], [z]) is at least [spacing] from every other.
   bool fits(double x, double z) {
@@ -24,7 +29,8 @@ final class ScatterSpacing {
     final s2 = spacing * spacing;
     for (var dz = -1; dz <= 1; dz++) {
       for (var dx = -1; dx <= 1; dx++) {
-        for (final (px, pz) in _buckets[(bx + dx, bz + dz)] ?? const <(double, double)>[]) {
+        for (final (px, pz)
+            in _buckets[(bx + dx, bz + dz)] ?? const <(double, double)>[]) {
           if ((px - x) * (px - x) + (pz - z) * (pz - z) < s2) return false;
         }
       }
@@ -41,10 +47,17 @@ final class ScatterSpacing {
 abstract final class ScatterBrush {
   /// Up to [tries] spots, evenly at random over the disk of [radius] about
   /// ([x], [z]).
-  static List<(double, double)> spots(math.Random random, double x, double z, double radius, int tries) => [
+  static List<(double, double)> spots(
+    math.Random random,
+    double x,
+    double z,
+    double radius,
+    int tries,
+  ) => [
     for (var k = 0; k < tries; k++)
       () {
-        final r = radius * math.sqrt(random.nextDouble()), a = random.nextDouble() * 2 * math.pi;
+        final r = radius * math.sqrt(random.nextDouble()),
+            a = random.nextDouble() * 2 * math.pi;
         return (x + r * math.cos(a), z + r * math.sin(a));
       }(),
   ];
@@ -52,16 +65,26 @@ abstract final class ScatterBrush {
   /// How many spots a dab of [radius] tries for pieces [spacing] apart:
   /// about as many as would fit, at most 64.
   static int triesFor(double radius, double spacing) =>
-      (math.pi * radius * radius / math.max(spacing * spacing, 0.01) * 0.6).ceil().clamp(1, 64);
+      (math.pi * radius * radius / math.max(spacing * spacing, 0.01) * 0.6)
+          .ceil()
+          .clamp(1, 64);
 
   /// [instances] less those within [radius] of ([x], [z]) — of [layer]
   /// only, when given.
-  static List<ScatterInstance> erased(List<ScatterInstance> instances, double x, double z, double radius, {int? layer}) {
+  static List<ScatterInstance> erased(
+    List<ScatterInstance> instances,
+    double x,
+    double z,
+    double radius, {
+    int? layer,
+  }) {
     final r2 = radius * radius;
     return [
       for (final i in instances)
         if ((layer != null && i.layer != layer) ||
-            (i.position.x - x) * (i.position.x - x) + (i.position.z - z) * (i.position.z - z) > r2)
+            (i.position.x - x) * (i.position.x - x) +
+                    (i.position.z - z) * (i.position.z - z) >
+                r2)
           i,
     ];
   }

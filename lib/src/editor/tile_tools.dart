@@ -7,10 +7,8 @@ import 'package:just_game_engine/just_game_engine.dart';
 import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_signals/just_signals.dart';
 
-import '../tiles/grid_orientations.dart';
-import '../tiles/grid_tiles.dart';
-import '../tiles/mesh_library.dart';
-import 'spline_tools.dart' show adoptEntities;
+import '../tiles/tiles.dart';
+import 'tool_parts.dart';
 
 /// The tool strip's group for tiles.
 const String tilesGroup = 'worldBuilder.tiles';
@@ -34,7 +32,13 @@ enum GridTileMode {
 /// The cells the Tiles tool would change now, in the world: from one
 /// corner cell to another, [cellSize] across, laid out by [toWorld].
 final class GridTilePreview {
-  const GridTilePreview({required this.from, required this.to, required this.cellSize, required this.toWorld, this.erasing = false});
+  const GridTilePreview({
+    required this.from,
+    required this.to,
+    required this.cellSize,
+    required this.toWorld,
+    this.erasing = false,
+  });
 
   final GridCell from, to;
   final double cellSize;
@@ -65,7 +69,8 @@ class GridTileStrokeCommand extends EditorCommand {
   /// Cell key to packed tile, or null for empty: before, and after.
   final Map<int, int?> before, after;
 
-  GridTiles3DComponent? get _tiles => sceneState.liveEntity(entity)?.getComponent<GridTiles3DComponent>();
+  GridTiles3DComponent? get _tiles =>
+      sceneState.liveEntity(entity)?.getComponent<GridTiles3DComponent>();
 
   void _apply(Map<int, int?> cells) {
     final tiles = _tiles;
@@ -102,7 +107,10 @@ class GridTileTool extends LevelToolHandler {
   /// Where it makes entities.
   final DesignerToolContext designer;
 
-  final Signal<GridTileMode> mode = Signal(GridTileMode.paint, debugLabel: 'tileMode');
+  final Signal<GridTileMode> mode = Signal(
+    GridTileMode.paint,
+    debugLabel: 'tileMode',
+  );
 
   /// The mesh library painted from.
   final Signal<String> library = Signal('', debugLabel: 'tileLibrary');
@@ -121,14 +129,22 @@ class GridTileTool extends LevelToolHandler {
   final Signal<bool> onSurfaces = Signal(true, debugLabel: 'tileOnSurfaces');
 
   /// What it would change now.
-  final Signal<GridTilePreview?> preview = Signal(null, debugLabel: 'tilePreview');
+  final Signal<GridTilePreview?> preview = Signal(
+    null,
+    debugLabel: 'tilePreview',
+  );
 
   static const String toolId = 'worldBuilder.tiles';
+
+  /// The most cells a fill spans along X or Z: a drag toward the horizon
+  /// fills this many, not millions.
+  static const int maxFillCells = 256;
 
   Entity? _target;
   bool _madeTarget = false;
   final Map<int, int?> _before = {};
-  GridCell? _fillFrom, _last;
+  // A fill's corners: where it began, and where it reaches now.
+  GridCell? _fillFrom, _fillTo, _last;
 
   // The floor level a stroke stays on once its first cell is down: what
   // it paints is not a surface to stack the next cell on.
@@ -167,9 +183,15 @@ class GridTileTool extends LevelToolHandler {
   Entity? get target {
     final selected = designer.sceneState.selectedEntity.value;
     final tiles = selected?.getComponent<GridTiles3DComponent>();
-    if (tiles != null && tiles.library.isNotEmpty && tiles.library == library.value) return selected;
+    if (tiles != null &&
+        tiles.library.isNotEmpty &&
+        tiles.library == library.value) {
+      return selected;
+    }
     for (final e in designer.world.query([GridTiles3DComponent])) {
-      if (e.getComponent<GridTiles3DComponent>()!.library == library.value) return e;
+      if (e.getComponent<GridTiles3DComponent>()!.library == library.value) {
+        return e;
+      }
     }
     return null;
   }
@@ -178,30 +200,31 @@ class GridTileTool extends LevelToolHandler {
   /// their pieces' ids and their cells' size are that library's, never
   /// another's. A piece the library has not got becomes its first.
   void _followSelection() {
-    final tiles = designer.sceneState.selectedEntity.value?.getComponent<GridTiles3DComponent>();
-    if (tiles != null && tiles.library.isNotEmpty && tiles.library != library.value) {
+    final tiles = designer.sceneState.selectedEntity.value
+        ?.getComponent<GridTiles3DComponent>();
+    if (tiles != null &&
+        tiles.library.isNotEmpty &&
+        tiles.library != library.value) {
       library.value = tiles.library;
     }
     final loaded = loadedLibrary;
-    if (loaded != null && loaded.items.isNotEmpty && loaded.item(item.value) == null) {
+    if (loaded != null &&
+        loaded.items.isNotEmpty &&
+        loaded.item(item.value) == null) {
       item.value = loaded.items.first.id;
     }
-  }
-
-  /// [entity]'s space to the world's, and back; the world's own for none.
-  (Matrix4, Matrix4) _spaceOf(Entity? entity) {
-    final toWorld = Matrix4.identity();
-    entity?.getComponent<TransformComponent>()?.localToWorldInto(toWorld);
-    final toLocal = Matrix4.identity();
-    if (toLocal.copyInverse(toWorld) == 0) toLocal.setIdentity();
-    return (toWorld, toLocal);
   }
 
   /// The cell the pointer is over: next to the surface it is on for a
   /// paint on surfaces, in the surface for an erase or a pick, and on the
   /// floor level — or [onFloor] — otherwise.
-  GridCell? _cellAt(SpaceContext space, MeshLibrary library, {required bool inside, int? onFloor}) {
-    final (_, toLocal) = _spaceOf(_target ?? target);
+  GridCell? _cellAt(
+    SpaceContext space,
+    MeshLibrary library, {
+    required bool inside,
+    int? onFloor,
+  }) {
+    final (_, toLocal) = spaceOf(_target ?? target);
     final size = library.cellSize;
     Vector3 local(Vector3 world) {
       final out = Vector3.zero();
@@ -214,7 +237,7 @@ class GridTileTool extends LevelToolHandler {
       if (hit.onto != null) {
         final normal = Vector3.copy(hit.normal)..normalize();
         final probe = hit.position + normal * (size * 0.5 * (inside ? -1 : 1));
-        return GridTiles3DComponent.cellAt(local(probe), size);
+        return _inRange(GridTiles3DComponent.cellAt(local(probe), size));
       }
       if (inside) return null;
     }
@@ -229,7 +252,44 @@ class GridTileTool extends LevelToolHandler {
     if (t < 0) return null;
     final at = origin + direction * t;
     final cell = GridTiles3DComponent.cellAt(at, size);
-    return (x: cell.x, y: -storey - 1, z: cell.z);
+    return _inRange((x: cell.x, y: -storey - 1, z: cell.z));
+  }
+
+  /// [cell], or null past the cells a grid can hold: its key would wrap
+  /// round to a cell at the other end ([GridTiles3DComponent.keyOf]).
+  static GridCell? _inRange(GridCell? cell) {
+    if (cell == null) return null;
+    bool fits(int v) => v >= -0x8000 && v < 0x8000;
+    return fits(cell.x) && fits(cell.y) && fits(cell.z) ? cell : null;
+  }
+
+  /// [to], brought within [maxFillCells] of [from] along X and Z.
+  static GridCell _clampFill(GridCell from, GridCell to) {
+    const reach = maxFillCells - 1;
+    return (
+      x: to.x.clamp(from.x - reach, from.x + reach),
+      y: to.y,
+      z: to.z.clamp(from.z - reach, from.z + reach),
+    );
+  }
+
+  /// The cells from [from] to [to] on its level, one after another along
+  /// the line between them, [from] left out: a fast drag paints every cell
+  /// it passes over, not one every so often.
+  static Iterable<GridCell> _cellsBetween(GridCell from, GridCell to) sync* {
+    final dx = to.x - from.x, dz = to.z - from.z;
+    final steps = math.max(dx.abs(), dz.abs());
+    var last = from;
+    for (var k = 1; k <= steps; k++) {
+      final cell = (
+        x: from.x + (dx * k / steps).round(),
+        y: to.y,
+        z: from.z + (dz * k / steps).round(),
+      );
+      if (cell != last) yield cell;
+      last = cell;
+    }
+    if (steps == 0 && to != from) yield to;
   }
 
   void _show(GridCell? from, GridCell? to, MeshLibrary library) {
@@ -237,7 +297,7 @@ class GridTileTool extends LevelToolHandler {
       preview.value = null;
       return;
     }
-    final (toWorld, _) = _spaceOf(_target ?? target);
+    final (toWorld, _) = spaceOf(_target ?? target);
     preview.value = GridTilePreview(
       from: from,
       to: to,
@@ -247,32 +307,33 @@ class GridTileTool extends LevelToolHandler {
     );
   }
 
-  /// The tiles painted into, made when there are none.
-  GridTiles3DComponent _tilesFor() {
+  /// The tiles painted into, made when there are none — unless [make] is
+  /// false (an erase: nothing to erase from); then null.
+  GridTiles3DComponent? _tilesFor({bool make = true}) {
     final existing = _target ?? target;
     if (existing != null) {
       _target = existing;
       return existing.getComponent<GridTiles3DComponent>()!;
     }
+    if (!make) return null;
     final tiles = GridTiles3DComponent(library: library.value);
-    _target = designer.world.createEntityWithComponents(
-      [
-        TransformComponent(),
-        tiles,
-        RigidBody3DComponent(bodyType: Body3DType.static),
-        Collider3DComponent(shape: Collider3DShape.matchShape),
-      ],
-      name: designer.uniqueName('Tiles'),
-    );
+    _target = designer.world.createEntityWithComponents([
+      TransformComponent(),
+      tiles,
+      RigidBody3DComponent(bodyType: Body3DType.static),
+      Collider3DComponent(shape: Collider3DShape.matchShape),
+    ], name: designer.uniqueName('Tiles'));
     _madeTarget = true;
     return tiles;
   }
 
   void _put(GridCell cell) {
-    final tiles = _tilesFor();
+    final erasing = mode.value == GridTileMode.erase;
+    final tiles = _tilesFor(make: !erasing);
+    if (tiles == null) return;
     final key = GridTiles3DComponent.keyOf(cell.x, cell.y, cell.z);
     _before.putIfAbsent(key, () => tiles.cells[key]);
-    if (mode.value == GridTileMode.erase) {
+    if (erasing) {
       tiles.clearTile(cell.x, cell.y, cell.z);
     } else {
       tiles.setTile(cell.x, cell.y, cell.z, item.value, orientation.value);
@@ -286,7 +347,11 @@ class GridTileTool extends LevelToolHandler {
     _followSelection();
     final loaded = loadedLibrary;
     if (loaded == null) {
-      context.controller.setStatus(library.value.isEmpty ? 'Choose a mesh library in the Tiles panel' : 'Loading ${library.value}…');
+      context.controller.setStatus(
+        library.value.isEmpty
+            ? 'Choose a mesh library in the Tiles panel'
+            : 'Loading ${library.value}…',
+      );
       return true;
     }
     if (context.isAltDown) {
@@ -294,10 +359,14 @@ class GridTileTool extends LevelToolHandler {
       return true;
     }
     _begin();
-    final cell = _cellAt(space, loaded, inside: mode.value == GridTileMode.erase);
+    final cell = _cellAt(
+      space,
+      loaded,
+      inside: mode.value == GridTileMode.erase,
+    );
     if (cell == null) return true;
     if (mode.value == GridTileMode.fill) {
-      _fillFrom = cell;
+      _fillFrom = _fillTo = cell;
       _show(cell, cell, loaded);
       return true;
     }
@@ -317,29 +386,39 @@ class GridTileTool extends LevelToolHandler {
       if (from == null) return;
       // On the floor level the fill started on.
       final to = _cellAt(space, loaded, inside: false, onFloor: -from.y - 1);
-      if (to != null) _show(from, to, loaded);
+      if (to != null) _fillTo = _clampFill(from, to);
+      _show(from, _fillTo, loaded);
       return;
     }
-    if (_last == null) return;
+    final last = _last;
+    if (last == null) return;
     // On the level the stroke began on: a tile just painted is not a
     // surface to stack the next on, nor one just erased a hole to dig on.
-    final cell = _cellAt(space, loaded, inside: mode.value == GridTileMode.erase, onFloor: _storey);
-    if (cell == null || cell == _last) return;
+    final cell = _cellAt(
+      space,
+      loaded,
+      inside: mode.value == GridTileMode.erase,
+      onFloor: _storey,
+    );
+    if (cell == null || cell == last) return;
+    for (final between in _cellsBetween(last, cell)) {
+      _put(between);
+    }
     _last = cell;
-    _put(cell);
     _show(cell, cell, loaded);
   }
 
   @override
   void onPointerUp(ToolContext context) {
     final loaded = loadedLibrary;
-    if (mode.value == GridTileMode.fill && _fillFrom != null && loaded != null) {
-      final box = preview.value;
-      if (box != null) {
-        for (var x = math.min(box.from.x, box.to.x); x <= math.max(box.from.x, box.to.x); x++) {
-          for (var z = math.min(box.from.z, box.to.z); z <= math.max(box.from.z, box.to.z); z++) {
-            _put((x: x, y: box.from.y, z: z));
-          }
+    final from = _fillFrom, to = _fillTo;
+    if (mode.value == GridTileMode.fill &&
+        from != null &&
+        to != null &&
+        loaded != null) {
+      for (var x = math.min(from.x, to.x); x <= math.max(from.x, to.x); x++) {
+        for (var z = math.min(from.z, to.z); z <= math.max(from.z, to.z); z++) {
+          _put((x: x, y: from.y, z: z));
         }
       }
     }
@@ -348,6 +427,8 @@ class GridTileTool extends LevelToolHandler {
 
   @override
   void onPointerHover(ToolContext context) {
+    // A fill under way shows its own box, whatever the floor shows.
+    if (_fillFrom != null) return;
     final space = context.space;
     if (space != null) _followSelection();
     final loaded = loadedLibrary;
@@ -355,7 +436,11 @@ class GridTileTool extends LevelToolHandler {
       preview.value = null;
       return;
     }
-    final cell = _cellAt(space, loaded, inside: mode.value == GridTileMode.erase);
+    final cell = _cellAt(
+      space,
+      loaded,
+      inside: mode.value == GridTileMode.erase,
+    );
     _show(cell, cell, loaded);
   }
 
@@ -363,26 +448,33 @@ class GridTileTool extends LevelToolHandler {
     _before.clear();
     _target = null;
     _madeTarget = false;
-    _fillFrom = null;
+    _fillFrom = _fillTo = null;
     _last = null;
     _storey = null;
   }
 
   void _commit(ToolContext context) {
     final target = _target;
-    final changed = {for (final MapEntry(:key, :value) in _before.entries) if (target?.getComponent<GridTiles3DComponent>()?.cells[key] != value) key: value};
-    _fillFrom = null;
+    final changed = {
+      for (final MapEntry(:key, :value) in _before.entries)
+        if (target?.getComponent<GridTiles3DComponent>()?.cells[key] != value)
+          key: value,
+    };
+    _fillFrom = _fillTo = null;
     _last = null;
     _storey = null;
     if (target == null) return;
     final tiles = target.getComponent<GridTiles3DComponent>()!;
-    final verb = mode.value == GridTileMode.erase ? 'Erase' : (mode.value == GridTileMode.fill ? 'Fill' : 'Paint');
+    final verb = mode.value == GridTileMode.erase
+        ? 'Erase'
+        : (mode.value == GridTileMode.fill ? 'Fill' : 'Paint');
     if (_madeTarget) {
       adoptEntities(designer, [target], '$verb tiles');
     } else if (changed.isNotEmpty) {
       designer.history.pushApplied(
         GridTileStrokeCommand(
-          label: '$verb ${changed.length} tile${changed.length == 1 ? '' : 's'}',
+          label:
+              '$verb ${changed.length} tile${changed.length == 1 ? '' : 's'}',
           sceneState: designer.sceneState,
           entity: target,
           before: changed,
@@ -408,16 +500,20 @@ class GridTileTool extends LevelToolHandler {
     }
     item.value = tile.item;
     orientation.value = tile.orientation;
-    context.controller.setStatus('Picked ${loaded.item(tile.item)?.name ?? 'piece ${tile.item}'}');
+    context.controller.setStatus(
+      'Picked ${loaded.item(tile.item)?.name ?? 'piece ${tile.item}'}',
+    );
   }
 
   @override
   bool onKey(LogicalKeyboardKey key, ToolContext context) {
-    if (key == LogicalKeyboardKey.escape && (_target != null || _fillFrom != null)) {
+    if (key == LogicalKeyboardKey.escape &&
+        (_target != null || _fillFrom != null)) {
       _cancelStroke();
       return true;
     }
-    if (key == LogicalKeyboardKey.pageUp || key == LogicalKeyboardKey.pageDown) {
+    if (key == LogicalKeyboardKey.pageUp ||
+        key == LogicalKeyboardKey.pageDown) {
       floor.value += key == LogicalKeyboardKey.pageUp ? 1 : -1;
       context.controller.setStatus('Floor ${floor.value}');
       onPointerHover(context);
@@ -435,7 +531,11 @@ class GridTileTool extends LevelToolHandler {
       _ => -1,
     };
     if (axis < 0) return false;
-    orientation.value = GridOrientations.turned(orientation.value, axis, context.isShiftDown ? -1 : 1);
+    orientation.value = GridOrientations.turned(
+      orientation.value,
+      axis,
+      context.isShiftDown ? -1 : 1,
+    );
     context.controller.setStatus('Turned: ${orientation.value} of 24');
     return true;
   }
@@ -463,6 +563,13 @@ class GridTileTool extends LevelToolHandler {
 
   @override
   void onCancel() => _cancelStroke();
+
+  /// The pointer left the viewport: no cell is under it. A stroke under
+  /// way keeps its preview until it ends.
+  @override
+  void onPointerExit() {
+    if (_target == null && _fillFrom == null) preview.value = null;
+  }
 
   @override
   void onDeactivate() {
@@ -497,9 +604,20 @@ class GridTileTool extends LevelToolHandler {
         builder: (context, value, _) => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            EditorIconButton(icon: Icons.arrow_downward, tooltip: 'Floor down (Page Down)', onTap: () => floor.value--),
-            Text('Floor $value', style: TextStyle(color: EditorTheme.textSecondary, fontSize: 11)),
-            EditorIconButton(icon: Icons.arrow_upward, tooltip: 'Floor up (Page Up)', onTap: () => floor.value++),
+            EditorIconButton(
+              icon: Icons.arrow_downward,
+              tooltip: 'Floor down (Page Down)',
+              onTap: () => floor.value--,
+            ),
+            Text(
+              'Floor $value',
+              style: TextStyle(color: EditorTheme.textSecondary, fontSize: 11),
+            ),
+            EditorIconButton(
+              icon: Icons.arrow_upward,
+              tooltip: 'Floor up (Page Up)',
+              onTap: () => floor.value++,
+            ),
           ],
         ),
       ),

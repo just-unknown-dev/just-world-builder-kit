@@ -17,7 +17,9 @@ final class TerrainData {
       weights = Uint8List(resolution * resolution * 4),
       holes = Uint8List((resolution * resolution + 7) >> 3),
       _blockRevisions = Uint32List(_blocks(resolution) * _blocks(resolution)) {
-    if (resolution < 2 || resolution > 4097) throw ArgumentError.value(resolution, 'resolution');
+    if (resolution < 2 || resolution > 4097) {
+      throw ArgumentError.value(resolution, 'resolution');
+    }
     for (var k = 0; k < resolution * resolution; k++) {
       weights[k * 4] = 255;
     }
@@ -39,7 +41,8 @@ final class TerrainData {
   static const List<int> _magic = [0x4A, 0x54, 0x52, 0x4E]; // JTRN
   static const ZlibCodec _zlib = ZlibCodec(level: 3);
 
-  static int _blocks(int resolution) => (resolution + blockSamples - 1) ~/ blockSamples;
+  static int _blocks(int resolution) =>
+      (resolution + blockSamples - 1) ~/ blockSamples;
 
   /// Samples a side.
   final int resolution;
@@ -74,7 +77,8 @@ final class TerrainData {
 
   int index(int i, int j) => j * resolution + i;
 
-  double height(int i, int j) => heights[index(i.clamp(0, resolution - 1), j.clamp(0, resolution - 1))];
+  double height(int i, int j) =>
+      heights[index(i.clamp(0, resolution - 1), j.clamp(0, resolution - 1))];
 
   bool isHole(int i, int j) {
     final k = index(i, j);
@@ -125,10 +129,15 @@ final class TerrainData {
   /// The height at ([x], [z]) samples in, between samples.
   double heightAt(double x, double z) {
     final last = resolution - 1;
-    final cx = x.clamp(0.0, last.toDouble()), cz = z.clamp(0.0, last.toDouble());
-    final i = math.min(cx.floor(), last - 1), j = math.min(cz.floor(), last - 1);
+    final cx = x.clamp(0.0, last.toDouble()),
+        cz = z.clamp(0.0, last.toDouble());
+    final i = math.min(cx.floor(), last - 1),
+        j = math.min(cz.floor(), last - 1);
     final fx = cx - i, fz = cz - j;
-    final a = height(i, j), b = height(i + 1, j), c = height(i, j + 1), d = height(i + 1, j + 1);
+    final a = height(i, j),
+        b = height(i + 1, j),
+        c = height(i, j + 1),
+        d = height(i + 1, j + 1);
     return (a * (1 - fx) + b * fx) * (1 - fz) + (c * (1 - fx) + d * fx) * fz;
   }
 
@@ -144,7 +153,9 @@ final class TerrainData {
   TerrainBlock capture(int bx, int bz) {
     final (i0, j0, i1, j1) = _rectOf(bx, bz);
     final w = i1 - i0 + 1, h = j1 - j0 + 1;
-    final hs = Float32List(w * h), ws = Uint8List(w * h * 4), hole = Uint8List(w * h);
+    final hs = Float32List(w * h),
+        ws = Uint8List(w * h * 4),
+        hole = Uint8List(w * h);
     for (var j = 0; j < h; j++) {
       for (var i = 0; i < w; i++) {
         final k = index(i0 + i, j0 + j), o = j * w + i;
@@ -177,14 +188,27 @@ final class TerrainData {
 
   (int, int, int, int) _rectOf(int bx, int bz) {
     final i0 = bx * blockSamples, j0 = bz * blockSamples;
-    return (i0, j0, math.min(i0 + blockSamples - 1, resolution - 1), math.min(j0 + blockSamples - 1, resolution - 1));
+    return (
+      i0,
+      j0,
+      math.min(i0 + blockSamples - 1, resolution - 1),
+      math.min(j0 + blockSamples - 1, resolution - 1),
+    );
   }
 
   /// The blocks the samples from ([i0], [j0]) to ([i1], [j1]) are in.
   Iterable<(int, int)> blocksIn(int i0, int j0, int i1, int j1) sync* {
     final last = resolution - 1;
-    for (var bz = j0.clamp(0, last) ~/ blockSamples; bz <= j1.clamp(0, last) ~/ blockSamples; bz++) {
-      for (var bx = i0.clamp(0, last) ~/ blockSamples; bx <= i1.clamp(0, last) ~/ blockSamples; bx++) {
+    for (
+      var bz = j0.clamp(0, last) ~/ blockSamples;
+      bz <= j1.clamp(0, last) ~/ blockSamples;
+      bz++
+    ) {
+      for (
+        var bx = i0.clamp(0, last) ~/ blockSamples;
+        bx <= i1.clamp(0, last) ~/ blockSamples;
+        bx++
+      ) {
         yield (bx, bz);
       }
     }
@@ -214,19 +238,30 @@ final class TerrainData {
 
   /// The terrain [bytes] hold; a [FormatException] when they hold none.
   static TerrainData decode(Uint8List bytes) {
-    if (bytes.length < 8) throw const FormatException('Not a terrain: too short');
+    if (bytes.length < 8) {
+      throw const FormatException('Not a terrain: too short');
+    }
     for (var k = 0; k < 4; k++) {
       if (bytes[k] != _magic[k]) throw const FormatException('Not a terrain');
     }
     final head = ByteData.sublistView(bytes, 0, 8);
     final version = head.getUint16(4, Endian.little);
-    if (version > _version) throw FormatException('Terrain version $version is newer than this engine reads ($_version)');
+    if (version > _version) {
+      throw FormatException(
+        'Terrain version $version is newer than this engine reads ($_version)',
+      );
+    }
     final resolution = head.getUint16(6, Endian.little);
     final n = resolution * resolution;
     final holeBytes = (n + 7) >> 3;
-    if (resolution < 2) throw const FormatException('A terrain\'s samples do not add up');
+    if (resolution < 2) {
+      throw const FormatException('A terrain\'s samples do not add up');
+    }
     // Never more than the header says: a damaged file fails at once.
-    final body = _zlib.decode(Uint8List.sublistView(bytes, 8), maxOutputSize: n * 8 + holeBytes);
+    final body = _zlib.decode(
+      Uint8List.sublistView(bytes, 8),
+      maxOutputSize: n * 8 + holeBytes,
+    );
     if (body.length != n * 4 + n * 4 + holeBytes) {
       throw const FormatException('A terrain\'s samples do not add up');
     }

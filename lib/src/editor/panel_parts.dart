@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart' show internal;
 import 'package:flutter/material.dart';
 import 'package:just_editor_core/just_editor_core.dart';
 
 /// A small caption over a part of a side-panel section: "BRUSH", "NEW
 /// TERRAIN".
+@internal
 class PanelCaption extends StatelessWidget {
   const PanelCaption(this.text, {super.key});
 
@@ -13,14 +15,25 @@ class PanelCaption extends StatelessWidget {
     padding: const EdgeInsets.only(top: 10, bottom: 4),
     child: Text(
       text.toUpperCase(),
-      style: TextStyle(color: EditorTheme.textMuted, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.6),
+      style: TextStyle(
+        color: EditorTheme.textMuted,
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.6,
+      ),
     ),
   );
 }
 
 /// A label and what it labels, on one line.
+@internal
 class PanelRow extends StatelessWidget {
-  const PanelRow({super.key, required this.label, required this.child, this.tooltip});
+  const PanelRow({
+    super.key,
+    required this.label,
+    required this.child,
+    this.tooltip,
+  });
 
   final String label;
   final Widget child;
@@ -28,12 +41,20 @@ class PanelRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Text(label, style: TextStyle(color: EditorTheme.textSecondary, fontSize: 11));
+    final text = Text(
+      label,
+      style: TextStyle(color: EditorTheme.textSecondary, fontSize: 11),
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          SizedBox(width: 64, child: tooltip == null ? text : Tooltip(message: tooltip!, child: text)),
+          SizedBox(
+            width: 64,
+            child: tooltip == null
+                ? text
+                : Tooltip(message: tooltip!, child: text),
+          ),
           Expanded(child: child),
         ],
       ),
@@ -42,6 +63,7 @@ class PanelRow extends StatelessWidget {
 }
 
 /// A quiet line of help.
+@internal
 class PanelHint extends StatelessWidget {
   const PanelHint(this.text, {super.key});
 
@@ -50,14 +72,27 @@ class PanelHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: 4),
-    child: Text(text, style: TextStyle(color: EditorTheme.textMuted, fontSize: 11, height: 1.35)),
+    child: Text(
+      text,
+      style: TextStyle(
+        color: EditorTheme.textMuted,
+        fontSize: 11,
+        height: 1.35,
+      ),
+    ),
   );
 }
 
 /// The thing a tool works on, named: "Shaping Terrain_0", with a line
 /// about it under.
+@internal
 class PanelTarget extends StatelessWidget {
-  const PanelTarget({super.key, required this.verb, required this.name, required this.detail});
+  const PanelTarget({
+    super.key,
+    required this.verb,
+    required this.name,
+    required this.detail,
+  });
 
   final String verb, name, detail;
 
@@ -68,13 +103,26 @@ class PanelTarget extends StatelessWidget {
       Text.rich(
         TextSpan(
           children: [
-            TextSpan(text: '$verb ', style: TextStyle(color: EditorTheme.textSecondary, fontSize: 12)),
-            TextSpan(text: name, style: TextStyle(color: EditorTheme.textBright, fontSize: 12, fontWeight: FontWeight.w600)),
+            TextSpan(
+              text: '$verb ',
+              style: TextStyle(color: EditorTheme.textSecondary, fontSize: 12),
+            ),
+            TextSpan(
+              text: name,
+              style: TextStyle(
+                color: EditorTheme.textBright,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
       const SizedBox(height: 2),
-      Text(detail, style: TextStyle(color: EditorTheme.textMuted, fontSize: 11)),
+      Text(
+        detail,
+        style: TextStyle(color: EditorTheme.textMuted, fontSize: 11),
+      ),
     ],
   );
 }

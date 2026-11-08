@@ -6,25 +6,8 @@
 /// library never imports.
 library;
 
-export 'src/scatter/scatter_brush.dart';
-export 'src/scatter/scatter_components.dart';
-export 'src/scatter/scatter_render.dart';
-export 'src/scatter/scatter_definitions.dart';
-export 'src/splines/path_follower_system.dart';
-export 'src/splines/spline_components.dart';
-export 'src/splines/spline_path.dart';
-export 'src/splines/spline_render.dart';
-export 'src/splines/spline_definitions.dart';
-export 'src/splines/spline_sweep.dart';
-export 'src/terrain/terrain_brush.dart';
-export 'src/terrain/terrain_3d_component.dart';
-export 'src/terrain/terrain_data.dart';
-export 'src/terrain/terrain_mesher.dart';
-export 'src/terrain/terrain_render.dart';
-export 'src/terrain/terrain_definitions.dart';
-export 'src/tiles/grid_orientations.dart';
-export 'src/tiles/grid_render.dart';
-export 'src/tiles/grid_tiles.dart';
-export 'src/tiles/mesh_library.dart';
-export 'src/tiles/tile_definitions.dart';
-export 'src/world_builder_kit.dart';
+export 'src/kit/kit.dart';
+export 'src/scatter/scatter.dart';
+export 'src/splines/splines.dart';
+export 'src/terrain/terrain.dart';
+export 'src/tiles/tiles.dart';

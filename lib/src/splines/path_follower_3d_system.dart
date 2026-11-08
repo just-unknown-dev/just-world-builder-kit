@@ -10,19 +10,31 @@ import 'spline_path.dart';
 /// stopping as its mode says. Runs before physics, so a kinematic body is
 /// carried, and what stands on it with it.
 ///
+/// While time stands still (a `deltaTime` of 0: paused, or an editor
+/// authoring the level) a follower stays where it is — and goes back to
+/// its start when its [PathFollower3DComponent.startAt] or its path is
+/// changed, so the designer sees where it will begin.
+///
 /// Writes only the follower's transform and its runtime fields.
 class PathFollower3DSystem extends System {
   @override
   int get priority => SystemPriorities.movingPlatform;
 
   @override
-  List<Type> get requiredComponents => const [TransformComponent, PathFollower3DComponent];
+  List<Type> get requiredComponents => const [
+    TransformComponent,
+    PathFollower3DComponent,
+  ];
 
   // Each spline's sampled path, while its shape stays the same.
   final Expando<(Object, SplinePath)> _paths = Expando();
+  // What each follower was placed at its start from: its start and its
+  // path's shape. While time stands still, a change sends it back there.
+  final Expando<(double, Object)> _startedFrom = Expando();
   final Matrix4 _toWorld = Matrix4.identity();
   final Vector3 _point = Vector3.zero();
   final Vector3 _way = Vector3.zero();
+  final Quaternion _turn = Quaternion.identity();
 
   /// [spline]'s path, sampled again only when it changed.
   SplinePath pathOf(Spline3DComponent spline) {
@@ -45,11 +57,19 @@ class PathFollower3DSystem extends System {
       if (spline == null) continue;
       final path = pathOf(spline);
       if (path.isEmpty) continue;
+      final from = (f.startAt, spline.shapeKey);
+      if (deltaTime <= 0 && !f.travelled.isNaN && _startedFrom[f] != from) {
+        // Its start or its path edited while time stands still.
+        f.travelled = double.nan;
+      }
       if (f.travelled.isNaN) {
         f
-          ..travelled = path.closed ? f.startAt % path.length : f.startAt.clamp(0.0, path.length)
+          ..travelled = path.closed
+              ? f.startAt % path.length
+              : f.startAt.clamp(0.0, path.length)
           ..direction = 1
           ..resting = 0;
+        _startedFrom[f] = from;
       } else if (deltaTime > 0) {
         advance(f, path, deltaTime);
       }
@@ -58,7 +78,11 @@ class PathFollower3DSystem extends System {
   }
 
   /// Moves [f] [deltaTime] seconds further along [path].
-  static void advance(PathFollower3DComponent f, SplinePath path, double deltaTime) {
+  static void advance(
+    PathFollower3DComponent f,
+    SplinePath path,
+    double deltaTime,
+  ) {
     final length = path.length;
     if (f.speed <= 0) return;
     var time = deltaTime;
@@ -106,7 +130,12 @@ class PathFollower3DSystem extends System {
   }
 
   /// Puts [entity] where [f] is along [path], laid out by [owner].
-  void place(Entity entity, PathFollower3DComponent f, Entity owner, SplinePath path) {
+  void place(
+    Entity entity,
+    PathFollower3DComponent f,
+    Entity owner,
+    SplinePath path,
+  ) {
     final t = entity.getComponent<TransformComponent>()!;
     final at = path.at(f.travelled);
     final ownerTransform = owner.getComponent<TransformComponent>();
@@ -122,28 +151,7 @@ class PathFollower3DSystem extends System {
     if (!f.faceAlong) return;
     final dx = _way.x * f.direction, dz = _way.z * f.direction;
     if (dx * dx + dz * dz < 1e-12) return;
-    t.setRotation(Quaternion.axisAngle(Vector3(0, 1, 0), math.atan2(dx, dz)));
-  }
-}
-
-/// Ties each [SplineSweep3DComponent] and [SplineInstances3DComponent] to the [Spline3DComponent] on
-/// its entity, before physics, so a sweep is solid even where nothing
-/// draws it. Writes only their runtime links.
-class SplineLinkSystem extends System {
-  @override
-  int get priority => SystemPriorities.movingPlatform + 1;
-
-  @override
-  List<Type> get requiredComponents => const [Spline3DComponent];
-
-  @override
-  void update(double deltaTime) {
-    for (final entity in entities) {
-      final spline = entity.getComponent<Spline3DComponent>()!;
-      final sweep = entity.getComponent<SplineSweep3DComponent>();
-      if (sweep != null && !identical(sweep.spline, spline)) sweep.spline = spline;
-      final instances = entity.getComponent<SplineInstances3DComponent>();
-      if (instances != null && !identical(instances.spline, spline)) instances.spline = spline;
-    }
+    _turn.setAxisAngle(0, 1, 0, math.atan2(dx, dz));
+    t.setRotation(_turn);
   }
 }

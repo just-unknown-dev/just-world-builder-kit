@@ -1,26 +1,19 @@
-import 'package:just_game_engine/just_game_engine_3d.dart' show ContextRenderProviders;
+import 'package:just_game_engine/just_game_engine_3d.dart'
+    show ContextRenderProviders;
 import 'package:just_game_engine/just_game_engine.dart';
 
-import 'splines/path_follower_system.dart';
-import 'splines/spline_render.dart';
-import 'splines/spline_definitions.dart';
-import 'scatter/scatter_render.dart';
-import 'scatter/scatter_definitions.dart';
-import 'terrain/terrain_3d_component.dart';
-import 'terrain/terrain_render.dart';
-import 'terrain/terrain_definitions.dart';
-import 'tiles/grid_render.dart';
-import 'tiles/grid_tiles.dart';
-import 'tiles/mesh_library.dart';
-import 'tiles/tile_definitions.dart';
+import '../scatter/scatter.dart';
+import '../splines/splines.dart';
+import '../terrain/terrain.dart';
+import '../tiles/tiles.dart';
+import 'world_builder_migrations.dart';
 
 /// The world builder kit's front door.
 ///
 /// ```dart
 /// final engine = Engine(config: EngineConfig(
 ///   extensions: [WorldBuilderKit.extension],
-///   graphics3D: Graphics3D(),
-///   physics3D: Physics3D(),
+///   services: [Graphics3D(), Physics3D()],
 /// ));
 /// await engine.initialize();
 /// WorldBuilderKit.registerSystems(engine.world);
@@ -30,7 +23,7 @@ import 'tiles/tile_definitions.dart';
 /// ```
 abstract final class WorldBuilderKit {
   /// Give it to the engine: the kit's components (saved, loaded, shown in
-  /// the editor), field types and what draws them.
+  /// the editor), field types, migrations and what draws them.
   static const ContextExtension extension = _WorldBuilderKitExtension();
 
   /// The id the kit's extension installs under.
@@ -38,18 +31,18 @@ abstract final class WorldBuilderKit {
 
   /// Every component the kit saves.
   static List<ComponentDefinition> get definitions => [
-    ...SplineDefinitions.all,
-    ...TileDefinitions.all,
-    ...TerrainDefinitions.all,
-    ...ScatterDefinitions.all,
+    ...Spline3DDefinitions.all,
+    ...GridTiles3DDefinitions.all,
+    ...Terrain3DDefinitions.all,
+    ...Scatter3DDefinitions.all,
   ];
 
   /// The field types the kit's components save through.
   static List<FieldType> get fieldTypes => [
-    SplineDefinitions.splinePoints,
-    TileDefinitions.gridCells,
-    ScatterDefinitions.layersType,
-    ScatterDefinitions.instancesType,
+    Spline3DDefinitions.splinePoints,
+    GridTiles3DDefinitions.gridCells,
+    Scatter3DDefinitions.layersType,
+    Scatter3DDefinitions.instancesType,
   ];
 
   /// What [extension] does, for a context of your own.
@@ -58,22 +51,10 @@ abstract final class WorldBuilderKit {
     context.install(BuiltInComponents.extension);
     context.fieldTypes.registerAll(fieldTypes);
     context.definitions.registerAll(definitions, ifAbsent: true);
-    context.migrations.renamedTypes.addAll(renamedTypes);
+    // Levels saved by an older kit are brought forward as they load.
+    WorldBuilderMigrations.install(context);
     registerRenderers(context);
   }
-
-  /// The kit's components renamed in scene format 11, when every
-  /// component's name came to end in `Component`: old name → new. Levels
-  /// saved before are brought forward as they load.
-  static const Map<String, String> renamedTypes = {
-    'Scatter3D': 'Scatter3DComponent',
-    'Spline3D': 'Spline3DComponent',
-    'SplineSweep3D': 'SplineSweep3DComponent',
-    'SplineInstances3D': 'SplineInstances3DComponent',
-    'PathFollower3D': 'PathFollower3DComponent',
-    'Terrain3D': 'Terrain3DComponent',
-    'GridTiles3D': 'GridTiles3DComponent',
-  };
 
   /// What draws the kit's pieces in 3-D.
   static void registerRenderers(EngineContext context) {
@@ -86,7 +67,12 @@ abstract final class WorldBuilderKit {
   }
 
   /// The kit's systems.
-  static List<System> systems() => [SplineLinkSystem(), GridTilesLinkSystem(), TerrainLinkSystem(), PathFollower3DSystem()];
+  static List<System> systems() => [
+    Spline3DLinkSystem(),
+    GridTiles3DLinkSystem(),
+    Terrain3DLinkSystem(),
+    PathFollower3DSystem(),
+  ];
 
   /// Adds [systems] to [world].
   static void registerSystems(World world) {
@@ -103,18 +89,26 @@ abstract final class WorldBuilderKit {
   /// Await it after loading a level and before the game runs: its ground
   /// and tiles are then solid from the first physics step. Without it they
   /// are read in the background once the game runs, and are not solid
-  /// until they arrive. A file that cannot be read leaves its piece empty
+  /// until they arrive; the link systems let go of the files no piece uses
+  /// any more either way. A file that cannot be read leaves its piece empty
   /// and says why (`TerrainFiles.errorOf`, `MeshLibraries.errorOf`).
   static Future<void> ready(World world) async {
-    final terrains = [for (final e in world.query([Terrain3DComponent])) e.getComponent<Terrain3DComponent>()!];
-    final grids = [for (final e in world.query([GridTiles3DComponent])) e.getComponent<GridTiles3DComponent>()!];
+    final terrains = [
+      for (final e in world.query([Terrain3DComponent]))
+        e.getComponent<Terrain3DComponent>()!,
+    ];
+    final grids = [
+      for (final e in world.query([GridTiles3DComponent]))
+        e.getComponent<GridTiles3DComponent>()!,
+    ];
     final files = TerrainFiles.of(world.context);
     final libraries = MeshLibraries.of(world.context);
     files.releaseUnused([for (final t in terrains) t.data]);
     libraries.releaseUnused([for (final g in grids) g.library]);
     await Future.wait<Object?>([
       for (final path in {for (final t in terrains) t.data}) files.ready(path),
-      for (final path in {for (final g in grids) g.library}) libraries.ready(path),
+      for (final path in {for (final g in grids) g.library})
+        libraries.ready(path),
     ]);
     for (final t in terrains) {
       t.link(files);
@@ -134,6 +128,9 @@ final class _WorldBuilderKitExtension implements RefreshableExtension {
   @override
   void install(EngineContext context) => WorldBuilderKit.install(context);
 
+  /// After a hot reload, in an editor: the field types, components and
+  /// renderers as the code now makes them. The migrations, which append,
+  /// are left as installed.
   @override
   void refresh(EngineContext context) {
     context.fieldTypes.registerAll(WorldBuilderKit.fieldTypes, override: true);

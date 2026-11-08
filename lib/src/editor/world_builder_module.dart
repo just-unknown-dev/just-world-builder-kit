@@ -4,11 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:just_editor_core/just_editor_core.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 
-import '../scatter/scatter_components.dart';
-import '../splines/spline_definitions.dart';
-import '../terrain/terrain_3d_component.dart';
-import '../tiles/grid_tiles.dart';
-import '../tiles/mesh_library.dart';
+import '../scatter/scatter.dart';
+import '../splines/splines.dart';
+import '../terrain/terrain.dart';
+import '../tiles/tiles.dart';
 import 'blockout_tools.dart';
 import 'mesh_library_workspace.dart';
 import 'scatter_inspector.dart';
@@ -19,6 +18,8 @@ import 'spline_tools.dart';
 import 'terrain_tools.dart';
 import 'tile_panel.dart';
 import 'tile_tools.dart';
+import 'tool_parts.dart';
+import 'world_builder_files.dart';
 import 'world_builder_picks.dart';
 
 /// The world builder kit in the editor: a Level Designer kit for 3-D
@@ -37,11 +38,11 @@ class WorldBuilderModule extends EditorModule {
 
   /// The kit's tools for a project in [root] (the working folder when
   /// null).
-  WorldBuilderModule({String? root}) : files = MeshLibraryFiles(root);
+  WorldBuilderModule({String? root}) : files = WorldBuilderFiles(root);
 
-  /// The project's mesh libraries; [MeshLibraryFiles.root] is the project
-  /// folder terrain files are read from and written to.
-  final MeshLibraryFiles files;
+  /// The project's mesh libraries and models; [WorldBuilderFiles.root] is
+  /// the project folder terrain files are read from and written to.
+  final WorldBuilderFiles files;
 
   /// The workspace a mesh library opens in.
   static const String meshLibraryWorkspaceId = 'worldBuilder.meshLibrary';
@@ -50,31 +51,50 @@ class WorldBuilderModule extends EditorModule {
   void onRegister(EditorModuleContext context) {
     _scope = context.scope;
     // The project's terrain files, not the bundle's.
-    TerrainFiles.of(context.scope.context).read = (path) => File('${files.root}/$path').readAsBytes();
+    TerrainFiles.of(context.scope.context).read = (path) =>
+        File('${files.root}/$path').readAsBytes();
   }
 
   GridTileTool? _tileTool() => _tools.whereType<GridTileTool>().firstOrNull;
 
-  TerrainSculptTool? _terrainTool() => _tools.whereType<TerrainSculptTool>().firstOrNull;
+  TerrainSculptTool? _terrainTool() =>
+      _tools.whereType<TerrainSculptTool>().firstOrNull;
 
   ScatterTool? _scatterTool() => _tools.whereType<ScatterTool>().firstOrNull;
 
   /// The terrains of the scene being saved, written with it: each file
   /// changed since it was last written.
+  ///
+  /// A file that cannot be written leaves the others to be written all
+  /// the same, stays unsaved, and fails the save with what went wrong
+  /// ([TerrainSaveException]). A file changed while it was written (a
+  /// stroke ending meanwhile) stays unsaved too: what was written is not
+  /// what it is now.
   @override
   Future<void> onSceneSaving(String sceneName) async {
     final scope = _scope;
     if (scope == null) return;
     final terrainFiles = TerrainFiles.of(scope.context);
-    final used = {for (final e in scope.world.query([Terrain3DComponent])) e.getComponent<Terrain3DComponent>()!.data};
+    final used = {
+      for (final e in scope.world.query([Terrain3DComponent]))
+        e.getComponent<Terrain3DComponent>()!.data,
+    };
+    final failed = <String, Object>{};
     for (final path in terrainFiles.unsaved.where(used.contains).toList()) {
       final data = terrainFiles.get(path);
       if (data == null) continue;
-      final file = File('${files.root}/$path');
-      await file.parent.create(recursive: true);
-      await file.writeAsBytes(data.encode());
-      terrainFiles.saved(path);
+      final revision = data.revision;
+      try {
+        final file = File('${files.root}/$path');
+        await file.parent.create(recursive: true);
+        await file.writeAsBytes(data.encode());
+      } on Object catch (error) {
+        failed[path] = error;
+        continue;
+      }
+      if (data.revision == revision) terrainFiles.saved(path);
     }
+    if (failed.isNotEmpty) throw TerrainSaveException(failed);
   }
 
   /// Another scene, or this one again: terrain changes never saved are
@@ -88,9 +108,13 @@ class WorldBuilderModule extends EditorModule {
     for (final path in terrainFiles.unsaved.toList()) {
       terrainFiles.forget(path);
     }
-    terrainFiles.releaseUnused([for (final e in scope.world.query([Terrain3DComponent])) e.getComponent<Terrain3DComponent>()!.data]);
+    terrainFiles.releaseUnused([
+      for (final e in scope.world.query([Terrain3DComponent]))
+        e.getComponent<Terrain3DComponent>()!.data,
+    ]);
     MeshLibraries.of(scope.context).releaseUnused([
-      for (final e in scope.world.query([GridTiles3DComponent])) e.getComponent<GridTiles3DComponent>()!.library,
+      for (final e in scope.world.query([GridTiles3DComponent]))
+        e.getComponent<GridTiles3DComponent>()!.library,
     ]);
   }
 
@@ -120,7 +144,15 @@ class WorldBuilderModule extends EditorModule {
   List<LevelToolHandler> createTools(DesignerToolContext context) {
     _tools
       ..clear()
-      ..addAll([BlockTool(context), FloorTool(context), RampTool(context), SplineTool(context), GridTileTool(context), TerrainSculptTool(context), ScatterTool(context)]);
+      ..addAll([
+        BlockTool(context),
+        FloorTool(context),
+        RampTool(context),
+        SplineTool(context),
+        GridTileTool(context),
+        TerrainSculptTool(context),
+        ScatterTool(context),
+      ]);
     return List.of(_tools);
   }
 
@@ -136,7 +168,7 @@ class WorldBuilderModule extends EditorModule {
   List<SidePanelSection> get designerPanels => [
     tilesPanel(_tileTool, files),
     terrainPanel(_terrainTool, root: files.root),
-    scatterPanel(_scatterTool, files.root),
+    scatterPanel(_scatterTool, files),
   ];
 
   @override
@@ -178,7 +210,7 @@ class WorldBuilderModule extends EditorModule {
       fileExtensions: const ['meshlib.json'],
       build: (context, workspace) => MeshLibraryWorkspace(
         path: workspace.path!,
-        root: files.root,
+        files: files,
         definitions: workspace.scope.context.definitions,
         workspace: workspace,
       ),
@@ -186,8 +218,14 @@ class WorldBuilderModule extends EditorModule {
   ];
 
   /// A mesh library saved: read again by what draws and collides with it.
+  /// A library or a model changed: the panels' lists are read again.
   @override
   void onAssetChanged(String path) {
+    if (path.endsWith(MeshLibrary.ending) ||
+        path.endsWith('.glb') ||
+        path.endsWith('.gltf')) {
+      files.refresh();
+    }
     if (!path.endsWith(MeshLibrary.ending)) return;
     final scope = _scope;
     if (scope != null) MeshLibraries.of(scope.context).forget(path);
@@ -248,18 +286,14 @@ class BlockoutPreviewOverlay extends DesignerOverlay {
     }
 
     if (preview.box case final box?) {
-      Vector3 corner(int i) => Vector3(
-        i & 1 == 0 ? box.min.x : box.max.x,
-        i & 2 == 0 ? box.min.y : box.max.y,
-        i & 4 == 0 ? box.min.z : box.max.z,
+      Offset? corner(int i) => view.projectToScreen(
+        Vector3(
+          i & 1 == 0 ? box.min.x : box.max.x,
+          i & 2 == 0 ? box.min.y : box.max.y,
+          i & 4 == 0 ? box.min.z : box.max.z,
+        ),
       );
-      for (final (a, b) in const [
-        (0, 1), (2, 3), (4, 5), (6, 7),
-        (0, 2), (1, 3), (4, 6), (5, 7),
-        (0, 4), (1, 5), (2, 6), (3, 7),
-      ]) {
-        line(corner(a), corner(b));
-      }
+      paintBoxEdges(canvas, [for (var i = 0; i < 8; i++) corner(i)], paint);
     }
     final outline = preview.outline;
     for (var i = 0; i + 1 < outline.length; i++) {
@@ -268,8 +302,24 @@ class BlockoutPreviewOverlay extends DesignerOverlay {
     if (preview.closed && outline.length > 2) line(outline.last, outline.first);
     for (final p in preview.markers) {
       final at = view.projectToScreen(p);
-      if (at != null) canvas.drawCircle(at, 3, Paint()..color = const Color(0xFF4FC3F7));
+      if (at != null) {
+        canvas.drawCircle(at, 3, Paint()..color = const Color(0xFF4FC3F7));
+      }
     }
     if (preview.line case (final a, final b)) line(a, b);
   }
+}
+
+/// Terrain files a scene's save could not write, by path: what each threw.
+/// They stay unsaved, to be written by the next save.
+final class TerrainSaveException implements Exception {
+  const TerrainSaveException(this.failed);
+
+  /// What writing each file threw, by its project-relative path.
+  final Map<String, Object> failed;
+
+  @override
+  String toString() =>
+      'Could not write ${failed.length == 1 ? 'a terrain file' : '${failed.length} terrain files'}: '
+      '${[for (final MapEntry(:key, :value) in failed.entries) '$key ($value)'].join('; ')}';
 }

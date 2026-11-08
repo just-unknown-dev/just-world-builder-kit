@@ -108,7 +108,11 @@ final class ScatterLayer {
     return ScatterLayer(
       name: json['name'] as String? ?? 'Layer',
       model: json['model'] as String? ?? '',
-      shape: ScatterShape.values.where((s) => s.name == json['shape']).firstOrNull ?? ScatterShape.cone,
+      shape:
+          ScatterShape.values
+              .where((s) => s.name == json['shape'])
+              .firstOrNull ??
+          ScatterShape.cone,
       color: Color(json['color'] is int ? json['color'] as int : 0xFF558B2F),
       spacing: n(json['spacing'], 1.5),
       minScale: n(json['minScale'], 0.8),
@@ -116,7 +120,11 @@ final class ScatterLayer {
       randomYaw: json['randomYaw'] as bool? ?? true,
       alignToNormal: json['alignToNormal'] as bool? ?? false,
       maxDistance: n(json['maxDistance'], 80),
-      collision: ScatterCollision.values.where((c) => c.name == json['collision']).firstOrNull ?? ScatterCollision.none,
+      collision:
+          ScatterCollision.values
+              .where((c) => c.name == json['collision'])
+              .firstOrNull ??
+          ScatterCollision.none,
       colliderRadius: n(json['colliderRadius'], 0.4),
       colliderHeight: n(json['colliderHeight'], 1.2),
     );
@@ -130,8 +138,13 @@ final class ScatterLayer {
 /// entity's space), turned [yaw] about its up, grown by [scale], leaning
 /// with [normal] (unit; up is -Y).
 final class ScatterInstance {
-  ScatterInstance({required this.layer, required this.position, this.yaw = 0, this.scale = 1, Vector3? normal})
-    : normal = normal ?? Vector3(0, -1, 0);
+  ScatterInstance({
+    required this.layer,
+    required this.position,
+    this.yaw = 0,
+    this.scale = 1,
+    Vector3? normal,
+  }) : normal = normal ?? Vector3(0, -1, 0);
 
   final int layer;
   final Vector3 position;
@@ -147,7 +160,9 @@ final class ScatterInstance {
       final axis = up.cross(n);
       final s = axis.length;
       if (s > 1e-6) {
-        turn.premultiply(Quaternion.axisAngle(axis..normalize(), math.atan2(s, up.dot(n))));
+        turn.premultiply(
+          Quaternion.axisAngle(axis..normalize(), math.atan2(s, up.dot(n))),
+        );
       }
     }
     return turn;
@@ -155,7 +170,8 @@ final class ScatterInstance {
 
   /// Where it is drawn: moved, leant, turned and grown.
   Matrix4 matrix({bool lean = false}) =>
-      Matrix4.identity()..setFromTrs(position, turn(lean: lean), Vector3(scale, scale, scale));
+      Matrix4.identity()
+        ..setFromTrs(position, turn(lean: lean), Vector3(scale, scale, scale));
 }
 
 /// Things scattered over the ground — grass, flowers, rocks, trees — of a
@@ -163,9 +179,13 @@ final class ScatterInstance {
 /// not at all far off; solid, for layers that say so, through a
 /// `Collider3DComponent` set to match its shape.
 class Scatter3DComponent extends Component implements SolidShapeSource {
-  Scatter3DComponent({List<ScatterLayer>? layers, List<ScatterInstance>? instances, this.cellSize = 32, this.castShadows = true})
-    : layers = layers ?? [ScatterLayer(name: 'Grass')],
-      instances = instances ?? [];
+  Scatter3DComponent({
+    List<ScatterLayer>? layers,
+    List<ScatterInstance>? instances,
+    this.cellSize = 32,
+    this.castShadows = true,
+  }) : layers = layers ?? [ScatterLayer(name: 'Grass')],
+       instances = instances ?? [];
 
   List<ScatterLayer> layers;
 
@@ -175,6 +195,7 @@ class Scatter3DComponent extends Component implements SolidShapeSource {
   /// Metres a side of each square its pieces are drawn in.
   double cellSize;
 
+  /// Whether its pieces cast shadows.
   bool castShadows;
 
   /// Runtime: bumped whenever [layers] or [instances] change.
@@ -231,7 +252,15 @@ class Scatter3DComponent extends Component implements SolidShapeSource {
           }
           parts.add(SolidHull(corners));
         case ScatterCollision.capsule:
-          parts.add(SolidCapsule(math.max(0, h / 2 - r), r, x: p.x, y: p.y - h / 2, z: p.z));
+          parts.add(
+            SolidCapsule(
+              math.max(0, h / 2 - r),
+              r,
+              x: p.x,
+              y: p.y - h / 2,
+              z: p.z,
+            ),
+          );
       }
     }
     _solid = (revision, parts);
@@ -249,10 +278,13 @@ class ScatterLayersFieldType extends FieldType<List<ScatterLayer>> {
   String get id => typeId;
 
   @override
-  Object? encode(List<ScatterLayer> value) => [for (final l in value) l.toJson()];
+  Object? encode(List<ScatterLayer> value) => [
+    for (final l in value) l.toJson(),
+  ];
 
   @override
-  Object? decode(Object? json, FieldConstraints constraints) => json is List ? [for (final l in json) ScatterLayer.fromJson(l)] : json;
+  Object? decode(Object? json, FieldConstraints constraints) =>
+      json is List ? [for (final l in json) ScatterLayer.fromJson(l)] : json;
 }
 
 /// A [Scatter3DComponent]'s pieces, saved as base64 of zlib-packed records: a
@@ -278,11 +310,13 @@ class ScatterInstancesFieldType extends FieldType<List<ScatterInstance>> {
   Object? encode(List<ScatterInstance> value) => encodeInstances(value);
 
   @override
-  Object? decode(Object? json, FieldConstraints constraints) => json is String ? decodeInstances(json) : json;
+  Object? decode(Object? json, FieldConstraints constraints) =>
+      json is String ? decodeInstances(json) : json;
 
   /// [instances] as text.
   static String encodeInstances(List<ScatterInstance> instances) {
-    final bytes = ByteData(1 + instances.length * _record)..setUint8(0, _version);
+    final bytes = ByteData(1 + instances.length * _record)
+      ..setUint8(0, _version);
     var o = 1;
     for (final i in instances) {
       bytes
@@ -310,12 +344,17 @@ class ScatterInstancesFieldType extends FieldType<List<ScatterInstance>> {
     return [
       for (var o = 1; o < raw.length; o += _record)
         () {
-          final nx = b.getFloat32(o + 21, Endian.little), nz = b.getFloat32(o + 25, Endian.little);
+          final nx = b.getFloat32(o + 21, Endian.little),
+              nz = b.getFloat32(o + 25, Endian.little);
           // Up is -Y: the lean's y is what is left of its length, upward.
           final ny = -math.sqrt(math.max(0, 1 - nx * nx - nz * nz));
           return ScatterInstance(
             layer: b.getUint8(o),
-            position: Vector3(b.getFloat32(o + 1, Endian.little), b.getFloat32(o + 5, Endian.little), b.getFloat32(o + 9, Endian.little)),
+            position: Vector3(
+              b.getFloat32(o + 1, Endian.little),
+              b.getFloat32(o + 5, Endian.little),
+              b.getFloat32(o + 9, Endian.little),
+            ),
             yaw: b.getFloat32(o + 13, Endian.little),
             scale: b.getFloat32(o + 17, Endian.little),
             normal: Vector3(nx, ny, nz),

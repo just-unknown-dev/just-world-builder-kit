@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,26 +6,39 @@ import 'package:just_game_engine/just_game_engine.dart';
 import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_signals/just_signals.dart';
 
-import '../scatter/scatter_brush.dart';
-import '../scatter/scatter_components.dart';
+import '../scatter/scatter.dart';
 import 'panel_parts.dart';
-import 'spline_tools.dart' show adoptEntities;
+import 'tool_parts.dart';
+import 'world_builder_files.dart';
 
 /// The tool strip's group for scatter.
 const String scatterGroup = 'worldBuilder.scatter';
 
-/// A stroke of the Scatter brush: the pieces of the [Scatter3DComponent] on
-/// [entity] as they were and as they became — found again as the editor
-/// finds an entity rebuilt (`EditorSceneState.liveEntity`), whatever it
-/// is named.
+/// A stroke of the Scatter brush on the [Scatter3DComponent] of [entity] —
+/// found again as the editor finds an entity rebuilt
+/// (`EditorSceneState.liveEntity`), whatever it is named.
+///
+/// Made from its pieces as they were and as they became, it keeps only
+/// what the stroke changed: the pieces it took out, where they were, and
+/// the ones it put in, where they went. A history of strokes over a scatter
+/// of many pieces holds the strokes, not that many pieces a step.
 class ScatterStrokeCommand extends EditorCommand {
   ScatterStrokeCommand({
     required this.label,
     required this.sceneState,
     required this.entity,
-    required this.before,
-    required this.after,
-  });
+    required List<ScatterInstance> before,
+    required List<ScatterInstance> after,
+  }) {
+    final kept = Set<ScatterInstance>.identity()..addAll(after);
+    final had = Set<ScatterInstance>.identity()..addAll(before);
+    for (final (i, p) in before.indexed) {
+      if (!kept.contains(p)) _removed.add((i, p));
+    }
+    for (final (i, p) in after.indexed) {
+      if (!had.contains(p)) _added.add((i, p));
+    }
+  }
 
   @override
   final String label;
@@ -36,28 +48,67 @@ class ScatterStrokeCommand extends EditorCommand {
   /// The entity painted, as it was when the stroke was made.
   final Entity entity;
 
-  final List<ScatterInstance> before, after;
+  // Where each was in the pieces before the stroke, and after it.
+  final List<(int, ScatterInstance)> _removed = [];
+  final List<(int, ScatterInstance)> _added = [];
 
-  void _apply(List<ScatterInstance> instances) {
-    sceneState.liveEntity(entity)?.getComponent<Scatter3DComponent>()
-      ?..instances = List.of(instances)
-      ..revision += 1;
+  /// How many pieces the stroke took out.
+  int get removedCount => _removed.length;
+
+  /// How many pieces the stroke put in.
+  int get addedCount => _added.length;
+
+  /// [from] with [take] taken out (by where they are in it) and [put] put
+  /// in (where they go in the result).
+  static List<ScatterInstance> _changed(
+    List<ScatterInstance> from,
+    List<(int, ScatterInstance)> take,
+    List<(int, ScatterInstance)> put,
+  ) {
+    final out = List.of(from);
+    for (final (i, _) in take.reversed) {
+      out.removeAt(i);
+    }
+    for (final (i, p) in put) {
+      out.insert(i, p);
+    }
+    return out;
+  }
+
+  void _apply({required bool forward}) {
+    final scatter = sceneState
+        .liveEntity(entity)
+        ?.getComponent<Scatter3DComponent>();
+    if (scatter != null) {
+      scatter
+        ..instances = forward
+            ? _changed(scatter.instances, _removed, _added)
+            : _changed(scatter.instances, _added, _removed)
+        ..revision += 1;
+    }
     sceneState
       ..markDirty()
       ..refresh();
   }
 
   @override
-  void redo() => _apply(after);
+  void redo() => _apply(forward: true);
 
   @override
-  void undo() => _apply(before);
+  void undo() => _apply(forward: false);
 }
 
 /// The layers a new scatter starts with: grass, rocks (solid) and trees
 /// (solid).
 List<ScatterLayer> starterScatterLayers() => [
-  ScatterLayer(name: 'Grass', color: const Color(0xFF7CB342), spacing: 1, minScale: 0.4, maxScale: 0.8, maxDistance: 150),
+  ScatterLayer(
+    name: 'Grass',
+    color: const Color(0xFF7CB342),
+    spacing: 1,
+    minScale: 0.4,
+    maxScale: 0.8,
+    maxDistance: 150,
+  ),
   ScatterLayer(
     name: 'Rocks',
     color: const Color(0xFF9E9E9E),
@@ -85,7 +136,12 @@ List<ScatterLayer> starterScatterLayers() => [
 
 /// Where the Scatter brush is: a disk on the surface under the pointer.
 final class ScatterBrushSpot {
-  const ScatterBrushSpot(this.centre, this.normal, this.radius, {this.erasing = false});
+  const ScatterBrushSpot(
+    this.centre,
+    this.normal,
+    this.radius, {
+    this.erasing = false,
+  });
 
   final Vector3 centre, normal;
   final double radius;
@@ -97,7 +153,8 @@ final class ScatterBrushSpot {
 /// down on what is under it; Shift erases. Paints the selected scatter, or
 /// the scene's first, or a new one; each stroke one undo step.
 class ScatterTool extends LevelToolHandler {
-  ScatterTool(this.designer, {math.Random? random}) : _random = random ?? math.Random();
+  ScatterTool(this.designer, {math.Random? random})
+    : _random = random ?? math.Random();
 
   /// Where it makes entities.
   final DesignerToolContext designer;
@@ -114,7 +171,10 @@ class ScatterTool extends LevelToolHandler {
   final Signal<bool> erase = Signal(false, debugLabel: 'scatterErase');
 
   /// Where the brush is now.
-  final Signal<ScatterBrushSpot?> spot = Signal(null, debugLabel: 'scatterSpot');
+  final Signal<ScatterBrushSpot?> spot = Signal(
+    null,
+    debugLabel: 'scatterSpot',
+  );
 
   static const String toolId = 'worldBuilder.scatter';
 
@@ -123,6 +183,10 @@ class ScatterTool extends LevelToolHandler {
   List<ScatterInstance>? _before;
   ScatterSpacing? _spacing;
   Vector3? _last;
+
+  // What the stroke's pieces can be set down on, with their boxes in the
+  // world: found once a stroke, then only those under a dab are tried.
+  List<(Entity, Aabb3)>? _groundBoxes;
 
   @override
   String get id => toolId;
@@ -134,7 +198,8 @@ class ScatterTool extends LevelToolHandler {
   IconData get icon => Icons.grass;
 
   @override
-  String? get description => 'Drag over the ground to scatter grass, rocks or trees, kept apart; Shift erases';
+  String? get description =>
+      'Drag over the ground to scatter grass, rocks or trees, kept apart; Shift erases';
 
   @override
   int get order => 80;
@@ -148,32 +213,60 @@ class ScatterTool extends LevelToolHandler {
   /// The scatter it paints: the selected one, else the scene's first.
   Entity? get target {
     final selected = designer.sceneState.selectedEntity.value;
-    if (selected != null && selected.hasComponent<Scatter3DComponent>()) return selected;
+    if (selected != null && selected.hasComponent<Scatter3DComponent>()) {
+      return selected;
+    }
     return designer.world.query([Scatter3DComponent]).firstOrNull;
   }
 
-  /// What a piece can be set down on: anything with a size.
-  Iterable<Entity> _grounds() {
+  /// What a piece can be set down on — anything with a size — and its box
+  /// in the world, once a stroke.
+  List<(Entity, Aabb3)> _grounds() => _groundBoxes ??= () {
     final definitions = designer.world.context.definitions;
-    return designer.world.query([TransformComponent]).where(
-      (e) => e.isActive && !e.hasComponent<Scatter3DComponent>() && e.components.any((c) => definitions.definitionFor(c)?.extent != null),
-    );
+    return [
+      for (final e in designer.world.query([TransformComponent]))
+        if (e.isActive &&
+            !e.hasComponent<Scatter3DComponent>() &&
+            e.components.any(
+              (c) => definitions.definitionFor(c)?.extent != null,
+            ))
+          if (_boxOf(e) case final box?) (e, box),
+    ];
+  }();
+
+  static Aabb3? _boxOf(Entity e) {
+    final box = Aabb3();
+    return RayEntityPicker.boundsOf(e, box) ? box : null;
   }
 
-  late final RayEntityPicker _picker = RayEntityPicker(tests: () => designer.scope.pickTests);
+  /// The grounds whose boxes reach under a brush of radius [r] at ([x],
+  /// [z]).
+  List<Entity> _groundsUnder(double x, double z, double r) => [
+    for (final (e, box) in _grounds())
+      if (box.max.x >= x - r &&
+          box.min.x <= x + r &&
+          box.max.z >= z - r &&
+          box.min.z <= z + r)
+        e,
+  ];
+
+  late final RayEntityPicker _picker = RayEntityPicker(
+    tests: () => designer.scope.pickTests,
+  );
 
   /// What is straight under ([x], [z]), from [above] metres up.
-  SurfacePoint? _groundAt(double x, double y, double z, List<Entity> grounds, {double above = 30}) {
-    final ray = Ray3.originDirection(Vector3(x, y - above, z), Vector3(0, 1, 0));
+  SurfacePoint? _groundAt(
+    double x,
+    double y,
+    double z,
+    List<Entity> grounds, {
+    double above = 30,
+  }) {
+    final ray = Ray3D.originDirection(
+      Vector3(x, y - above, z),
+      Vector3(0, 1, 0),
+    );
     return _picker.placementAlong(ray, grounds);
-  }
-
-  (Matrix4, Matrix4) _spaceOf(Entity? entity) {
-    final toWorld = Matrix4.identity();
-    entity?.getComponent<TransformComponent>()?.localToWorldInto(toWorld);
-    final toLocal = Matrix4.identity();
-    if (toLocal.copyInverse(toWorld) == 0) toLocal.setIdentity();
-    return (toWorld, toLocal);
   }
 
   Scatter3DComponent _scatterFor() {
@@ -183,23 +276,34 @@ class ScatterTool extends LevelToolHandler {
       return existing.getComponent<Scatter3DComponent>()!;
     }
     final scatter = Scatter3DComponent(layers: starterScatterLayers());
-    _entity = designer.world.createEntityWithComponents(
-      [TransformComponent(), scatter, RigidBody3DComponent(bodyType: Body3DType.static), Collider3DComponent(shape: Collider3DShape.matchShape)],
-      name: designer.uniqueName('Scatter'),
-    );
+    _entity = designer.world.createEntityWithComponents([
+      TransformComponent(),
+      scatter,
+      RigidBody3DComponent(bodyType: Body3DType.static),
+      Collider3DComponent(shape: Collider3DShape.matchShape),
+    ], name: designer.uniqueName('Scatter'));
     _made = true;
     return scatter;
   }
 
-  /// One dab about [at] (the world).
+  /// One dab about [at] (the world). A scatter is made only once a piece
+  /// lands: a stroke where nothing does leaves the scene as it was.
   void _dab(Vector3 at, bool erasing) {
-    final scatter = _scatterFor();
-    final (toWorld, toLocal) = _spaceOf(_entity);
-    final centre = Vector3.zero();
-    toLocal.transformPointInto(at, centre);
+    final existing = _entity ?? target;
     final r = radius.value;
     if (erasing) {
-      final kept = ScatterBrush.erased(scatter.instances, centre.x, centre.z, r, layer: layer.value);
+      if (existing == null) return;
+      final scatter = _scatterFor();
+      final (_, toLocal) = spaceOf(_entity);
+      final centre = Vector3.zero();
+      toLocal.transformPointInto(at, centre);
+      final kept = ScatterBrush.erased(
+        scatter.instances,
+        centre.x,
+        centre.z,
+        r,
+        layer: layer.value,
+      );
       if (kept.length != scatter.instances.length) {
         scatter
           ..instances = kept
@@ -208,13 +312,27 @@ class ScatterTool extends LevelToolHandler {
       }
       return;
     }
-    if (scatter.layers.isEmpty) return;
-    final index = layer.value.clamp(0, scatter.layers.length - 1);
-    final l = scatter.layers[index];
-    final spacing = _spacing ??= ScatterSpacing(scatter.instances, index, l.spacing);
-    final grounds = _grounds().toList();
-    var added = false;
-    for (final (x, z) in ScatterBrush.spots(_random, at.x, at.z, r, ScatterBrush.triesFor(r, l.spacing))) {
+    // Into the scatter there is, or the one a first piece makes.
+    final into = existing?.getComponent<Scatter3DComponent>();
+    final layers = into?.layers ?? starterScatterLayers();
+    if (layers.isEmpty) return;
+    final index = layer.value.clamp(0, layers.length - 1);
+    final l = layers[index];
+    final (_, toLocal) = spaceOf(existing);
+    final spacing = _spacing ??= ScatterSpacing(
+      into?.instances ?? const [],
+      index,
+      l.spacing,
+    );
+    final grounds = _groundsUnder(at.x, at.z, r);
+    final placed = <ScatterInstance>[];
+    for (final (x, z) in ScatterBrush.spots(
+      _random,
+      at.x,
+      at.z,
+      r,
+      ScatterBrush.triesFor(r, l.spacing),
+    )) {
       final ground = _groundAt(x, at.y, z, grounds);
       if (ground == null) continue;
       final local = Vector3.zero(), normal = Vector3.zero();
@@ -224,7 +342,7 @@ class ScatterTool extends LevelToolHandler {
       // Not on walls: the ground must face up a little at least.
       if (normal.lengthSquared == 0 || (normal..normalize()).y > -0.3) continue;
       spacing.add(local.x, local.z);
-      scatter.instances.add(
+      placed.add(
         ScatterInstance(
           layer: index,
           position: local,
@@ -233,14 +351,22 @@ class ScatterTool extends LevelToolHandler {
           normal: normal,
         ),
       );
-      added = true;
     }
-    if (added) scatter.revision++;
+    if (placed.isEmpty) return;
+    final scatter = _scatterFor();
+    scatter
+      ..instances.addAll(placed)
+      ..revision += 1;
   }
 
-  void _show(SpaceContext space, bool erasing) {
-    final hit = space.surface(ignore: {?_entity});
-    spot.value = ScatterBrushSpot(hit.position, hit.normal, radius.value, erasing: erasing);
+  /// The brush at [hit], the surface under the pointer.
+  void _show(SurfacePoint hit, bool erasing) {
+    spot.value = ScatterBrushSpot(
+      hit.position,
+      hit.normal,
+      radius.value,
+      erasing: erasing,
+    );
   }
 
   @override
@@ -251,13 +377,16 @@ class ScatterTool extends LevelToolHandler {
     _entity = null;
     _made = false;
     final existing = target;
-    _before = List.of(existing?.getComponent<Scatter3DComponent>()?.instances ?? const []);
+    _before = List.of(
+      existing?.getComponent<Scatter3DComponent>()?.instances ?? const [],
+    );
     _spacing = null;
-    final at = space.surface(ignore: {?existing}).position;
-    _last = at;
+    _groundBoxes = null;
+    final hit = space.surface(ignore: {?existing});
+    _last = hit.position;
     if (erasing && existing == null) return true;
-    _dab(at, erasing);
-    _show(space, erasing);
+    _dab(hit.position, erasing);
+    _show(hit, erasing);
     return true;
   }
 
@@ -266,13 +395,14 @@ class ScatterTool extends LevelToolHandler {
     final space = context.space, last = _last;
     if (space == null || last == null) return;
     final erasing = erase.value || context.isShiftDown;
-    final at = space.surface(ignore: {?_entity}).position;
+    final hit = space.surface(ignore: {?_entity});
+    final at = hit.position;
     // A dab each third of the brush along the way.
     if ((at - last).length >= radius.value / 3) {
       _dab(at, erasing);
       _last = at;
     }
-    _show(space, erasing);
+    _show(hit, erasing);
   }
 
   @override
@@ -281,11 +411,16 @@ class ScatterTool extends LevelToolHandler {
     _last = null;
     _before = null;
     _spacing = null;
+    _groundBoxes = null;
     if (entity == null || before == null) return;
     final scatter = entity.getComponent<Scatter3DComponent>()!;
     final verb = erase.value || context.isShiftDown ? 'Erase' : 'Scatter';
     if (_made) {
-      adoptEntities(designer, [entity], '$verb ${scatter.layers.isEmpty ? '' : scatter.layers[layer.value.clamp(0, scatter.layers.length - 1)].name.toLowerCase()}');
+      adoptEntities(
+        designer,
+        [entity],
+        '$verb ${scatter.layers.isEmpty ? '' : scatter.layers[layer.value.clamp(0, scatter.layers.length - 1)].name.toLowerCase()}',
+      );
     } else if (!_same(scatter.instances, before)) {
       designer.history.pushApplied(
         ScatterStrokeCommand(
@@ -324,7 +459,19 @@ class ScatterTool extends LevelToolHandler {
   @override
   void onPointerHover(ToolContext context) {
     final space = context.space;
-    if (space != null) _show(space, erase.value || context.isShiftDown);
+    if (space != null) {
+      _show(
+        space.surface(ignore: {?_entity}),
+        erase.value || context.isShiftDown,
+      );
+    }
+  }
+
+  /// The pointer left the viewport: the brush goes with it, unless a
+  /// stroke is under way.
+  @override
+  void onPointerExit() {
+    if (_last == null) spot.value = null;
   }
 
   @override
@@ -343,6 +490,7 @@ class ScatterTool extends LevelToolHandler {
     _made = false;
     _before = null;
     _last = null;
+    _groundBoxes = null;
   }
 
   @override
@@ -351,10 +499,14 @@ class ScatterTool extends LevelToolHandler {
     spot.value = null;
   }
 
+  /// The layers of the scatter it paints, or a new one's: read as the
+  /// options bar is drawn, and as its menu opens, never kept.
+  List<ScatterLayer> get _layers =>
+      target?.getComponent<Scatter3DComponent>()?.layers ??
+      starterScatterLayers();
+
   @override
   Widget? buildOptions(BuildContext context, ToolOptionsContext options) {
-    final muted = TextStyle(color: EditorTheme.textSecondary, fontSize: 11);
-    final layers = target?.getComponent<Scatter3DComponent>()?.layers ?? starterScatterLayers();
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -369,38 +521,55 @@ class ScatterTool extends LevelToolHandler {
         const SizedBox(width: 6),
         SignalBuilder<int>(
           signal: layer,
-          builder: (context, value, _) => PopupMenuButton<int>(
-            tooltip: 'The layer',
-            initialValue: value,
-            color: EditorTheme.menuBg,
-            position: PopupMenuPosition.over,
-            onSelected: (v) => layer.value = v,
-            itemBuilder: (context) => [
-              for (final (i, l) in layers.indexed) editorMenuItem(i, l.name, icon: Icons.circle, iconColor: l.color),
-            ],
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(value < layers.length ? layers[value].name : 'Layer ${value + 1}', style: muted),
-            ),
-          ),
+          builder: (context, value, _) =>
+              _LayerPicker(tool: this, value: value),
         ),
         const SizedBox(width: 6),
         SignalBuilder<double>(
           signal: radius,
-          builder: (context, value, _) => PopupMenuButton<double>(
+          builder: (context, value, _) => ToolOptionPicker<double>(
+            value: value,
+            values: const [1.0, 2.0, 5.0, 10.0, 20.0],
+            label: (r) =>
+                'Brush ${r.toStringAsFixed(r == r.roundToDouble() ? 0 : 1)} m',
             tooltip: 'How big',
-            initialValue: value,
-            color: EditorTheme.menuBg,
-            position: PopupMenuPosition.over,
             onSelected: (v) => radius.value = v,
-            itemBuilder: (context) => [
-              for (final r in const [1.0, 2.0, 5.0, 10.0, 20.0])
-                editorMenuItem(r, '${r.toInt()} m'),
-            ],
-            child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Text('Brush ${value.toInt()} m', style: muted)),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The options bar's layer: the scatter's layers read as it is drawn and as
+/// its menu opens, so a layer added, taken out or another scatter selected
+/// shows at once.
+class _LayerPicker extends StatelessWidget {
+  const _LayerPicker({required this.tool, required this.value});
+
+  final ScatterTool tool;
+  final int value;
+
+  @override
+  Widget build(BuildContext context) {
+    final layers = tool._layers;
+    return PopupMenuButton<int>(
+      tooltip: 'The layer',
+      initialValue: value,
+      color: EditorTheme.menuBg,
+      position: PopupMenuPosition.over,
+      onSelected: (v) => tool.layer.value = v,
+      itemBuilder: (context) => [
+        for (final (i, l) in tool._layers.indexed)
+          editorMenuItem(i, l.name, icon: Icons.circle, iconColor: l.color),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Text(
+          value < layers.length ? layers[value].name : 'Layer ${value + 1}',
+          style: TextStyle(color: EditorTheme.textSecondary, fontSize: 11),
+        ),
+      ),
     );
   }
 }
@@ -430,7 +599,9 @@ class ScatterBrushOverlay extends DesignerOverlay {
   @override
   void paint(OverlayPaintContext context) {
     final t = tool();
-    if (t == null || context.controller.toolId.value != ScatterTool.toolId) return;
+    if (t == null || context.controller.toolId.value != ScatterTool.toolId) {
+      return;
+    }
     final s = t.spot.value;
     if (s == null) return;
     final paint = Paint()
@@ -442,26 +613,32 @@ class ScatterBrushOverlay extends DesignerOverlay {
     final helper = n.x.abs() < 0.9 ? Vector3(1, 0, 0) : Vector3(0, 0, 1);
     final u = n.cross(helper)..normalize();
     final v = n.cross(u)..normalize();
-    Offset? last;
-    for (var k = 0; k <= 48; k++) {
-      final a = 2 * math.pi * k / 48;
-      final p = s.centre + u * (math.cos(a) * s.radius) + v * (math.sin(a) * s.radius) - n * 0.03;
-      final at = context.draw.camera.projectToScreen(p);
-      if (at != null && last != null) context.draw.canvas.drawLine(last, at, paint);
-      last = at;
-    }
+    paintRing(
+      context.draw.canvas,
+      paint,
+      (a) =>
+          s.centre +
+          u * (math.cos(a) * s.radius) +
+          v * (math.sin(a) * s.radius) -
+          n * 0.03,
+      context.draw.camera.projectToScreen,
+    );
   }
 }
 
 /// The designer's Scatter panel, open with the Scatter brush: the scatter
 /// being painted, the brush, and its layers — the one to paint, how many
 /// pieces of each, and the chosen one's settings.
-SidePanelSection scatterPanel(ScatterTool? Function() tool, String root) => SidePanelSection(
+SidePanelSection scatterPanel(
+  ScatterTool? Function() tool,
+  WorldBuilderFiles files,
+) => SidePanelSection(
   id: 'worldBuilder.scatter',
   title: 'SCATTER',
   order: 32,
   groups: const {scatterGroup},
-  build: (context, session) => _ScatterPanel(session: session, tool: tool, root: root),
+  build: (context, session) =>
+      _ScatterPanel(session: session, tool: tool, files: files),
 );
 
 /// What a scatter layer's collision is called in the panel.
@@ -473,18 +650,31 @@ String scatterCollisionLabel(ScatterCollision c) => switch (c) {
 
 /// Takes layer [index] out of [scatter], and its pieces with it — the
 /// pieces of the layers after it now count one less — as one undo step.
-void removeScatterLayer(EditorScope scope, Scatter3DComponent scatter, int index) {
+void removeScatterLayer(
+  EditorScope scope,
+  Scatter3DComponent scatter,
+  int index,
+) {
   if (index < 0 || index >= scatter.layers.length) return;
   final name = scatter.layers[index].name;
   final edit = ComponentEdit.begin(scope, scatter);
   scatter
-    ..layers = [for (final (k, x) in scatter.layers.indexed) if (k != index) x]
+    ..layers = [
+      for (final (k, x) in scatter.layers.indexed)
+        if (k != index) x,
+    ]
     ..instances = [
       for (final p in scatter.instances)
         if (p.layer != index)
           p.layer < index
               ? p
-              : ScatterInstance(layer: p.layer - 1, position: p.position, yaw: p.yaw, scale: p.scale, normal: p.normal),
+              : ScatterInstance(
+                  layer: p.layer - 1,
+                  position: p.position,
+                  yaw: p.yaw,
+                  scale: p.scale,
+                  normal: p.normal,
+                ),
     ]
     ..revision += 1;
   edit.commit('Remove $name');
@@ -500,40 +690,60 @@ List<int> scatterCounts(Scatter3DComponent scatter) {
 }
 
 class _ScatterPanel extends StatefulWidget {
-  const _ScatterPanel({required this.session, required this.tool, required this.root});
+  const _ScatterPanel({
+    required this.session,
+    required this.tool,
+    required this.files,
+  });
 
   final DesignerSession session;
   final ScatterTool? Function() tool;
-  final String root;
+  final WorldBuilderFiles files;
 
   @override
   State<_ScatterPanel> createState() => _ScatterPanelState();
 }
 
 class _ScatterPanelState extends State<_ScatterPanel> {
-  late final List<String> _models = _findModels();
+  List<String> _models = const [];
 
-  /// The edit a slider's drag makes, recorded when it is let go.
+  /// The edit a slider's drag makes, recorded when it is let go — or when
+  /// the panel goes first — under [_dragLabel].
   ComponentEdit? _drag;
+  String _dragLabel = '';
 
-  List<String> _findModels() {
-    final assets = Directory('${widget.root}/assets');
-    if (!assets.existsSync()) return const [];
-    final root = widget.root.replaceAll(r'\', '/');
-    return [
-      for (final f in assets.listSync(recursive: true).whereType<File>())
-        if (f.path.endsWith('.glb') || f.path.endsWith('.gltf')) f.path.replaceAll(r'\', '/').substring(root.length + 1),
-    ]..sort();
+  @override
+  void initState() {
+    super.initState();
+    // The project's models, read off the UI thread.
+    widget.files.models().then((models) {
+      if (mounted) setState(() => _models = models);
+    });
+  }
+
+  @override
+  void dispose() {
+    // A drag the panel was closed in the middle of is still one step.
+    _drag?.commit(_dragLabel);
+    _drag = null;
+    super.dispose();
   }
 
   /// Changes [scatter]'s layers as one undo step called [label].
-  void _edit(Scatter3DComponent scatter, String label, void Function(List<ScatterLayer> layers) change) {
+  void _edit(
+    Scatter3DComponent scatter,
+    String label,
+    void Function(List<ScatterLayer> layers) change,
+  ) {
     final edit = ComponentEdit.begin(widget.session.scope, scatter);
     _apply(scatter, change);
     edit.commit(label);
   }
 
-  void _apply(Scatter3DComponent scatter, void Function(List<ScatterLayer> layers) change) {
+  void _apply(
+    Scatter3DComponent scatter,
+    void Function(List<ScatterLayer> layers) change,
+  ) {
     final layers = [for (final l in scatter.layers) l.copy()];
     change(layers);
     scatter
@@ -542,8 +752,14 @@ class _ScatterPanelState extends State<_ScatterPanel> {
   }
 
   /// A slider's change: shown at once, one undo step when let go.
-  void _slide(Scatter3DComponent scatter, String label, void Function(List<ScatterLayer> layers) change, {required bool end}) {
+  void _slide(
+    Scatter3DComponent scatter,
+    String label,
+    void Function(List<ScatterLayer> layers) change, {
+    required bool end,
+  }) {
     _drag ??= ComponentEdit.begin(widget.session.scope, scatter);
+    _dragLabel = label;
     _apply(scatter, change);
     if (end) {
       _drag!.commit(label);
@@ -565,7 +781,9 @@ class _ScatterPanelState extends State<_ScatterPanel> {
         final entity = tool.target;
         final scatter = entity?.getComponent<Scatter3DComponent>();
         final layers = scatter?.layers ?? starterScatterLayers();
-        final counts = scatter == null ? List<int>.filled(layers.length, 0) : scatterCounts(scatter);
+        final counts = scatter == null
+            ? List<int>.filled(layers.length, 0)
+            : scatterCounts(scatter);
         final index = layers.isEmpty ? 0 : chosen.clamp(0, layers.length - 1);
         return Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
@@ -576,10 +794,13 @@ class _ScatterPanelState extends State<_ScatterPanel> {
                 PanelTarget(
                   verb: 'Painting',
                   name: entity!.name ?? 'scatter',
-                  detail: '${scatter.instances.length} pieces in ${layers.length} layers',
+                  detail:
+                      '${scatter.instances.length} pieces in ${layers.length} layers',
                 )
               else
-                const PanelHint('No scatter in this scene yet: the first stroke makes one, with grass, rocks and trees.'),
+                const PanelHint(
+                  'No scatter in this scene yet: the first stroke makes one, with grass, rocks and trees.',
+                ),
               const PanelCaption('Brush'),
               SignalBuilder<bool>(
                 signal: tool.erase,
@@ -608,7 +829,9 @@ class _ScatterPanelState extends State<_ScatterPanel> {
                   ),
                 ),
               ),
-              const PanelHint('Drag over the ground — terrain, tiles, shapes, models: each piece is set down on what is under it.'),
+              const PanelHint(
+                'Drag over the ground — terrain, tiles, shapes, models: each piece is set down on what is under it.',
+              ),
               const PanelCaption('Layers'),
               Wrap(
                 spacing: 4,
@@ -620,7 +843,8 @@ class _ScatterPanelState extends State<_ScatterPanel> {
                       color: l.color,
                       count: counts[i],
                       selected: i == index,
-                      tooltip: 'Paint ${l.name.toLowerCase()} (${counts[i]} pieces)',
+                      tooltip:
+                          'Paint ${l.name.toLowerCase()} (${counts[i]} pieces)',
                       onTap: () {
                         tool.layer.value = i;
                         session.setTool(ScatterTool.toolId);
@@ -628,18 +852,27 @@ class _ScatterPanelState extends State<_ScatterPanel> {
                     ),
                 ],
               ),
-              if (scatter != null && layers.isNotEmpty) ..._layerSettings(scatter, index, layers[index]),
+              if (scatter != null && layers.isNotEmpty)
+                ..._layerSettings(scatter, index, layers[index]),
               if (scatter != null) ...[
                 const SizedBox(height: 6),
                 EditorButton(
                   label: 'Add a layer',
                   icon: Icons.add,
                   onPressed: () {
-                    _edit(scatter, 'Add a scatter layer', (all) => all.add(ScatterLayer(name: 'Layer ${all.length + 1}')));
+                    _edit(
+                      scatter,
+                      'Add a scatter layer',
+                      (all) => all.add(
+                        ScatterLayer(name: 'Layer ${all.length + 1}'),
+                      ),
+                    );
                     tool.layer.value = scatter.layers.length - 1;
                   },
                 ),
-                const PanelHint('Every setting, the colour and the reach among them, is in the inspector (Scatter 3D).'),
+                const PanelHint(
+                  'Every setting, the colour and the reach among them, is in the inspector (Scatter 3D).',
+                ),
               ],
             ],
           ),
@@ -648,14 +881,23 @@ class _ScatterPanelState extends State<_ScatterPanel> {
     );
   }
 
-  List<Widget> _layerSettings(Scatter3DComponent scatter, int i, ScatterLayer l) {
+  List<Widget> _layerSettings(
+    Scatter3DComponent scatter,
+    int i,
+    ScatterLayer l,
+  ) {
     String label(String what) => 'Change ${l.name}: $what';
     return [
       PanelCaption('${l.name} settings'),
       PanelRow(
         label: 'Looks like',
-        tooltip: 'What each piece is: one of the engine\'s shapes in the layer\'s colour, or a model',
-        child: scatterLooksPicker(l, _models, (pick) => _edit(scatter, label('look'), (all) => pick.apply(all[i]))),
+        tooltip:
+            'What each piece is: one of the engine\'s shapes in the layer\'s colour, or a model',
+        child: scatterLooksPicker(
+          l,
+          _models,
+          (pick) => _edit(scatter, label('look'), (all) => pick.apply(all[i])),
+        ),
       ),
       PanelRow(
         label: 'Solid',
@@ -663,8 +905,12 @@ class _ScatterPanelState extends State<_ScatterPanel> {
         child: EditorSegmented<ScatterCollision>(
           value: l.collision,
           expand: true,
-          options: [for (final c in ScatterCollision.values) (c, scatterCollisionLabel(c))],
-          onChanged: (c) => _edit(scatter, label('collision'), (all) => all[i].collision = c),
+          options: [
+            for (final c in ScatterCollision.values)
+              (c, scatterCollisionLabel(c)),
+          ],
+          onChanged: (c) =>
+              _edit(scatter, label('collision'), (all) => all[i].collision = c),
         ),
       ),
       PanelRow(
@@ -677,8 +923,18 @@ class _ScatterPanelState extends State<_ScatterPanel> {
           step: 0.1,
           decimals: 1,
           unit: ' m',
-          onChanged: (v) => _slide(scatter, label('spacing'), (all) => all[i].spacing = v, end: false),
-          onChangeEnd: (v) => _slide(scatter, label('spacing'), (all) => all[i].spacing = v, end: true),
+          onChanged: (v) => _slide(
+            scatter,
+            label('spacing'),
+            (all) => all[i].spacing = v,
+            end: false,
+          ),
+          onChangeEnd: (v) => _slide(
+            scatter,
+            label('spacing'),
+            (all) => all[i].spacing = v,
+            end: true,
+          ),
         ),
       ),
       PanelRow(
@@ -690,12 +946,22 @@ class _ScatterPanelState extends State<_ScatterPanel> {
           step: 0.05,
           decimals: 2,
           unit: '×',
-          onChanged: (v) => _slide(scatter, label('size'), (all) => all[i]
-            ..minScale = v
-            ..maxScale = v > all[i].maxScale ? v : all[i].maxScale, end: false),
-          onChangeEnd: (v) => _slide(scatter, label('size'), (all) => all[i]
-            ..minScale = v
-            ..maxScale = v > all[i].maxScale ? v : all[i].maxScale, end: true),
+          onChanged: (v) => _slide(
+            scatter,
+            label('size'),
+            (all) => all[i]
+              ..minScale = v
+              ..maxScale = v > all[i].maxScale ? v : all[i].maxScale,
+            end: false,
+          ),
+          onChangeEnd: (v) => _slide(
+            scatter,
+            label('size'),
+            (all) => all[i]
+              ..minScale = v
+              ..maxScale = v > all[i].maxScale ? v : all[i].maxScale,
+            end: true,
+          ),
         ),
       ),
       PanelRow(
@@ -707,22 +973,34 @@ class _ScatterPanelState extends State<_ScatterPanel> {
           step: 0.05,
           decimals: 2,
           unit: '×',
-          onChanged: (v) => _slide(scatter, label('size'), (all) => all[i]
-            ..maxScale = v
-            ..minScale = v < all[i].minScale ? v : all[i].minScale, end: false),
-          onChangeEnd: (v) => _slide(scatter, label('size'), (all) => all[i]
-            ..maxScale = v
-            ..minScale = v < all[i].minScale ? v : all[i].minScale, end: true),
+          onChanged: (v) => _slide(
+            scatter,
+            label('size'),
+            (all) => all[i]
+              ..maxScale = v
+              ..minScale = v < all[i].minScale ? v : all[i].minScale,
+            end: false,
+          ),
+          onChangeEnd: (v) => _slide(
+            scatter,
+            label('size'),
+            (all) => all[i]
+              ..maxScale = v
+              ..minScale = v < all[i].minScale ? v : all[i].minScale,
+            end: true,
+          ),
         ),
       ),
       PanelRow(
         label: 'Lean',
-        tooltip: 'Whether its pieces lean with the slope under them, or stand upright',
+        tooltip:
+            'Whether its pieces lean with the slope under them, or stand upright',
         child: EditorSegmented<bool>(
           value: l.alignToNormal,
           expand: true,
           options: const [(false, 'Upright'), (true, 'With the ground')],
-          onChanged: (v) => _edit(scatter, label('lean'), (all) => all[i].alignToNormal = v),
+          onChanged: (v) =>
+              _edit(scatter, label('lean'), (all) => all[i].alignToNormal = v),
         ),
       ),
       const SizedBox(height: 4),
@@ -735,9 +1013,15 @@ class _ScatterPanelState extends State<_ScatterPanel> {
               onPressed: scatterCounts(scatter)[i] == 0
                   ? null
                   : () {
-                      final edit = ComponentEdit.begin(widget.session.scope, scatter);
+                      final edit = ComponentEdit.begin(
+                        widget.session.scope,
+                        scatter,
+                      );
                       scatter
-                        ..instances = [for (final p in scatter.instances) if (p.layer != i) p]
+                        ..instances = [
+                          for (final p in scatter.instances)
+                            if (p.layer != i) p,
+                        ]
                         ..revision += 1;
                       edit.commit('Clear ${l.name}');
                     },
@@ -774,11 +1058,13 @@ final class ScatterLook {
   }
 
   /// What [layer] looks like now.
-  static ScatterLook of(ScatterLayer layer) =>
-      layer.model.isEmpty ? ScatterLook.shape(layer.shape) : ScatterLook.model(layer.model);
+  static ScatterLook of(ScatterLayer layer) => layer.model.isEmpty
+      ? ScatterLook.shape(layer.shape)
+      : ScatterLook.model(layer.model);
 
   @override
-  bool operator ==(Object other) => other is ScatterLook && other.model == model && other.shape == shape;
+  bool operator ==(Object other) =>
+      other is ScatterLook && other.model == model && other.shape == shape;
 
   @override
   int get hashCode => Object.hash(model, shape);
@@ -786,15 +1072,28 @@ final class ScatterLook {
 
 /// A searchable list of what [layer]'s pieces can be — the engine's
 /// shapes in its colour, then [models] — calling [onPick].
-Widget scatterLooksPicker(ScatterLayer layer, List<String> models, ValueChanged<ScatterLook> onPick) => EditorDropdown<ScatterLook>(
+Widget scatterLooksPicker(
+  ScatterLayer layer,
+  List<String> models,
+  ValueChanged<ScatterLook> onPick,
+) => EditorDropdown<ScatterLook>(
   value: ScatterLook.of(layer),
   searchable: true,
   tooltip: 'What each piece is',
   options: [
     for (final s in ScatterShape.values)
-      EditorDropdownOption(value: ScatterLook.shape(s), label: s.label, color: layer.color, detail: 'shape'),
+      EditorDropdownOption(
+        value: ScatterLook.shape(s),
+        label: s.label,
+        color: layer.color,
+        detail: 'shape',
+      ),
     for (final m in models)
-      EditorDropdownOption(value: ScatterLook.model(m), label: m.split('/').last, detail: m.substring(0, m.lastIndexOf('/') + 1)),
+      EditorDropdownOption(
+        value: ScatterLook.model(m),
+        label: m.split('/').last,
+        detail: m.substring(0, m.lastIndexOf('/') + 1),
+      ),
   ],
   onChanged: onPick,
 );

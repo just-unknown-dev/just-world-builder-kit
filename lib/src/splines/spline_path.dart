@@ -7,7 +7,12 @@ import 'spline_components.dart';
 /// Where a [SplinePath] is at some distance along it: the point, the way
 /// it runs ([tangent]), its [up] (with the spline's roll) and [right] —
 /// unit length, square to each other.
-typedef SplineFrame = ({Vector3 position, Vector3 tangent, Vector3 up, Vector3 right});
+typedef SplineFrame = ({
+  Vector3 position,
+  Vector3 tangent,
+  Vector3 up,
+  Vector3 right,
+});
 
 /// A [Spline3DComponent] sampled finely along its length, in its entity's own
 /// space: where it is at any distance along it, which way it runs, which
@@ -17,7 +22,13 @@ typedef SplineFrame = ({Vector3 position, Vector3 tangent, Vector3 up, Vector3 r
 ///
 /// +Y is down: up is -Y.
 final class SplinePath {
-  SplinePath._(this.positions, this.tangents, this.ups, this.distances, this.closed);
+  SplinePath._(
+    this.positions,
+    this.tangents,
+    this.ups,
+    this.distances,
+    this.closed,
+  );
 
   /// [spline] sampled [perSegment] times between each two of its points.
   factory SplinePath.of(Spline3DComponent spline, {int perSegment = 24}) {
@@ -56,8 +67,12 @@ final class SplinePath {
     // one spot): they take the first way there is.
     var leading = 0;
     for (var i = 0; i < count; i++) {
-      final before = i == 0 ? (closed ? positions[count - 2] : positions[0]) : positions[i - 1];
-      final after = i == count - 1 ? (closed ? positions[1] : positions[count - 1]) : positions[i + 1];
+      final before = i == 0
+          ? (closed ? positions[count - 2] : positions[0])
+          : positions[i - 1];
+      final after = i == count - 1
+          ? (closed ? positions[1] : positions[count - 1])
+          : positions[i + 1];
       final t = after - before;
       if (t.lengthSquared >= 1e-18) {
         tangents.add(t..normalize());
@@ -134,10 +149,19 @@ final class SplinePath {
   /// [closed], held at its ends otherwise.
   SplineFrame at(double distance) {
     if (positions.isEmpty) {
-      return (position: Vector3.zero(), tangent: Vector3(0, 0, 1), up: Vector3(0, -1, 0), right: Vector3(1, 0, 0));
+      return (
+        position: Vector3.zero(),
+        tangent: Vector3(0, 0, 1),
+        up: Vector3(0, -1, 0),
+        right: Vector3(1, 0, 0),
+      );
     }
     if (isEmpty) {
-      return _frame(Vector3.copy(positions.first), Vector3.copy(tangents.first), Vector3.copy(ups.first));
+      return _frame(
+        Vector3.copy(positions.first),
+        Vector3.copy(tangents.first),
+        Vector3.copy(ups.first),
+      );
     }
     var d = distance;
     if (closed) {
@@ -160,7 +184,11 @@ final class SplinePath {
     final f = span <= 0 ? 0.0 : (d - distances[lo]) / span;
     Vector3 lerp(Vector3 a, Vector3 b) => a + (b - a) * f;
     final tangent = lerp(tangents[lo], tangents[hi])..normalize();
-    return _frame(lerp(positions[lo], positions[hi]), tangent, _square(lerp(ups[lo], ups[hi]), tangent));
+    return _frame(
+      lerp(positions[lo], positions[hi]),
+      tangent,
+      _square(lerp(ups[lo], ups[hi]), tangent),
+    );
   }
 
   /// [at] as a matrix: its columns right, down (−up), along and the
@@ -190,7 +218,9 @@ final class SplinePath {
   ({double distance, Vector3 position}) nearest(Vector3 point) {
     var best = double.infinity;
     var bestDistance = 0.0;
-    var bestPoint = positions.isEmpty ? Vector3.zero() : Vector3.copy(positions.first);
+    var bestPoint = positions.isEmpty
+        ? Vector3.zero()
+        : Vector3.copy(positions.first);
     for (var i = 0; i + 1 < positions.length; i++) {
       final a = positions[i], b = positions[i + 1];
       final ab = b - a;
@@ -217,7 +247,9 @@ final class SplinePath {
   static Vector3 _square(Vector3 up, Vector3 tangent) {
     var u = up - tangent * tangent.dot(up);
     if (u.lengthSquared < 1e-12) {
-      final across = tangent.x.abs() < 0.9 ? Vector3(1, 0, 0) : Vector3(0, 0, 1);
+      final across = tangent.x.abs() < 0.9
+          ? Vector3(1, 0, 0)
+          : Vector3(0, 0, 1);
       u = across - tangent * tangent.dot(across);
     }
     return u..normalize();
@@ -241,9 +273,14 @@ final class SplinePath {
   static List<SplinePoint> _distinct(List<SplinePoint> points, bool closed) {
     final out = <SplinePoint>[];
     for (final p in points) {
-      if (out.isEmpty || (p.position - out.last.position).lengthSquared > _samePlace) out.add(p);
+      if (out.isEmpty ||
+          (p.position - out.last.position).lengthSquared > _samePlace) {
+        out.add(p);
+      }
     }
-    if (closed && out.length > 1 && (out.last.position - out.first.position).lengthSquared <= _samePlace) {
+    if (closed &&
+        out.length > 1 &&
+        (out.last.position - out.first.position).lengthSquared <= _samePlace) {
       out.removeLast();
     }
     return out;
@@ -251,7 +288,13 @@ final class SplinePath {
 
   // The point [t] of the way along segment [s] (from point s to s + 1) of
   // [points], [closed] when they run round.
-  static Vector3 _point(List<SplinePoint> points, bool closed, SplineInterpolation interpolation, int s, double t) {
+  static Vector3 _point(
+    List<SplinePoint> points,
+    bool closed,
+    SplineInterpolation interpolation,
+    int s,
+    double t,
+  ) {
     final n = points.length;
     Vector3 at(int i) {
       if (closed) return points[((i % n) + n) % n].position;
@@ -273,11 +316,20 @@ final class SplinePath {
             0.5;
       case SplineInterpolation.bezier:
         final a = points[s], b = points[(s + 1) % n];
-        final out = a.mode == SplineTangentMode.auto || a.outTangent.lengthSquared == 0 ? (p2 - p0) / 6 : a.outTangent;
-        final into = b.mode == SplineTangentMode.auto || b.inTangent.lengthSquared == 0 ? (p1 - p3) / 6 : b.inTangent;
+        final out =
+            a.mode == SplineTangentMode.auto || a.outTangent.lengthSquared == 0
+            ? (p2 - p0) / 6
+            : a.outTangent;
+        final into =
+            b.mode == SplineTangentMode.auto || b.inTangent.lengthSquared == 0
+            ? (p1 - p3) / 6
+            : b.inTangent;
         final c1 = p1 + out, c2 = p2 + into;
         final u = 1 - t;
-        return p1 * (u * u * u) + c1 * (3 * u * u * t) + c2 * (3 * u * t * t) + p2 * (t * t * t);
+        return p1 * (u * u * u) +
+            c1 * (3 * u * u * t) +
+            c2 * (3 * u * t * t) +
+            p2 * (t * t * t);
     }
   }
 }

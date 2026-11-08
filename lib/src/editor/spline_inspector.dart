@@ -4,29 +4,32 @@ import 'package:just_game_engine/just_game_engine_3d.dart';
 import 'package:just_game_engine/just_game_engine.dart';
 import 'package:just_signals/just_signals.dart';
 
-import '../splines/spline_components.dart';
-import '../splines/spline_path.dart';
-import '../splines/spline_render.dart';
+import '../splines/splines.dart';
 import 'spline_tools.dart' show rotationOfBasis;
 
 /// The inspector's row for a [Spline3DComponent]'s points: how many and how long,
 /// with Reverse and Flatten. The points themselves are dragged in the
 /// viewport.
 Widget splinePointsEditor(FieldEditorContext context) {
-  final points = [for (final p in (context.value as List?) ?? const []) if (p is SplinePoint) p];
+  final points = [
+    for (final p in (context.value as List?) ?? const [])
+      if (p is SplinePoint) p,
+  ];
   final component = context.component;
   final closed = component is Spline3DComponent && component.closed;
   final length = SplinePath.of(
     Spline3DComponent(
       points: points,
       closed: closed,
-      interpolation: component is Spline3DComponent ? component.interpolation : SplineInterpolation.catmullRom,
+      interpolation: component is Spline3DComponent
+          ? component.interpolation
+          : SplineInterpolation.catmullRom,
     ),
   ).length;
   return Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      ReadonlyRow(
+      ReadonlyFieldRow(
         label: context.hint.label ?? 'Points',
         value: '${points.length} points · ${length.toStringAsFixed(1)} m',
       ),
@@ -37,13 +40,17 @@ Widget splinePointsEditor(FieldEditorContext context) {
           EditorButton(
             label: 'Reverse',
             kind: EditorButtonKind.ghost,
-            onPressed: context.readOnly || points.length < 2 ? null : () => context.onChanged(SplineEdits.reversed(points)),
+            onPressed: context.readOnly || points.length < 2
+                ? null
+                : () => context.onChanged(SplineEdits.reversed(points)),
           ),
           const SizedBox(width: 4),
           EditorButton(
             label: 'Flatten',
             kind: EditorButtonKind.ghost,
-            onPressed: context.readOnly || points.length < 2 ? null : () => context.onChanged(SplineEdits.flattened(points)),
+            onPressed: context.readOnly || points.length < 2
+                ? null
+                : () => context.onChanged(SplineEdits.flattened(points)),
           ),
         ],
       ),
@@ -90,7 +97,12 @@ abstract final class SplineEdits {
     final spline = entity.getComponent<Spline3DComponent>();
     final transform = entity.getComponent<TransformComponent>();
     if (spline == null || transform == null) return const [];
-    final instances = SplineInstances3DComponent(spacing: spacing, startAt: startAt, sideOffset: side, alignToPath: align);
+    final instances = SplineInstances3DComponent(
+      spacing: spacing,
+      startAt: startAt,
+      sideOffset: side,
+      alignToPath: align,
+    );
     final path = SplinePath.of(spline);
     final world = Matrix4.identity();
     transform.localToWorldInto(world);
@@ -116,10 +128,18 @@ abstract final class SplineEdits {
   /// Copies of each of [sources] — and of what is inside it — standing
   /// every [spacing] metres along [splineEntity]'s spline, turned to face
   /// along it, as one undo step. Returns how many were made.
-  static int layAlong(EditorScope scope, Entity splineEntity, List<Entity> sources, double spacing) {
+  static int layAlong(
+    EditorScope scope,
+    Entity splineEntity,
+    List<Entity> sources,
+    double spacing,
+  ) {
     final world = scope.world;
     final places = placesAlong(splineEntity, spacing: spacing);
-    final outermost = _outermost(world, [for (final e in sources) if (!identical(e, splineEntity)) e]);
+    final outermost = _outermost(world, [
+      for (final e in sources)
+        if (!identical(e, splineEntity)) e,
+    ]);
     if (places.isEmpty || outermost.isEmpty) return 0;
     final namer = _namer(world);
     final specs = <EntitySpec>[];
@@ -149,7 +169,8 @@ abstract final class SplineEdits {
     if (specs.isEmpty) return 0;
     scope.history.push(
       CreateEntitiesCommand(
-        label: 'Lay ${outermost.length == 1 ? outermost.single.name ?? 'entity' : '${outermost.length} entities'} along ${splineEntity.name ?? 'the spline'}',
+        label:
+            'Lay ${outermost.length == 1 ? outermost.single.name ?? 'entity' : '${outermost.length} entities'} along ${splineEntity.name ?? 'the spline'}',
         world: world,
         sceneState: scope.sceneState,
         specs: specs,
@@ -185,7 +206,9 @@ abstract final class SplineEdits {
     final specs = <EntitySpec>[
       EntitySpec(
         name: groupName,
-        componentsJson: codec.encodeAll([TransformComponent(position: Vector3.copy(owner.position))]),
+        componentsJson: codec.encodeAll([
+          TransformComponent(position: Vector3.copy(owner.position)),
+        ]),
         codec: codec,
       ),
     ];
@@ -197,16 +220,27 @@ abstract final class SplineEdits {
         turn.rotate(lift);
         position.add(lift);
       }
-      final transform = TransformComponent(position: position, scale: Vector3.copy(scale))..setRotation(turn);
+      final transform = TransformComponent(
+        position: position,
+        scale: Vector3.copy(scale),
+      )..setRotation(turn);
       specs.add(
         EntitySpec(
           name: namer(stem),
           componentsJson: codec.encodeAll([
             transform,
             if (instances.model.isEmpty)
-              Cube3DComponent(width: 1, height: 1, depth: 1, castShadows: instances.castShadows)
+              Cube3DComponent(
+                width: 1,
+                height: 1,
+                depth: 1,
+                castShadows: instances.castShadows,
+              )
             else
-              ModelComponent(model: instances.model, castShadows: instances.castShadows),
+              ModelComponent(
+                model: instances.model,
+                castShadows: instances.castShadows,
+              ),
           ]),
           codec: codec,
           parentName: groupName,
@@ -215,10 +249,20 @@ abstract final class SplineEdits {
     }
     scope.history.push(
       CompositeCommand(
-        label: 'Bake ${places.length} copies along ${entity.name ?? 'the spline'}',
+        label:
+            'Bake ${places.length} copies along ${entity.name ?? 'the spline'}',
         commands: [
-          CreateEntitiesCommand(label: 'Bake copies', world: world, sceneState: scope.sceneState, specs: specs),
-          RemoveComponentCommand(entity: entity, component: instances, sceneState: scope.sceneState),
+          CreateEntitiesCommand(
+            label: 'Bake copies',
+            world: world,
+            sceneState: scope.sceneState,
+            specs: specs,
+          ),
+          RemoveComponentCommand(
+            entity: entity,
+            component: instances,
+            sceneState: scope.sceneState,
+          ),
         ],
       ),
     );
@@ -231,7 +275,12 @@ abstract final class SplineEdits {
   /// Names of the form `prefix_N` not used in [world], nor handed out
   /// before by the namer.
   static String Function(String prefix) _namer(World world) {
-    final taken = {...world.query([TransformComponent]).map((e) => e.name).whereType<String>()};
+    final taken = {
+      ...world
+          .query([TransformComponent])
+          .map((e) => e.name)
+          .whereType<String>(),
+    };
     return (prefix) {
       var index = 0;
       while (taken.contains('${prefix}_$index')) {
@@ -250,12 +299,18 @@ abstract final class SplineEdits {
       var parent = e.getComponent<ParentComponent>()?.parentId;
       for (var guard = 0; parent != null && guard < 64; guard++) {
         if (ids.contains(parent)) return true;
-        parent = world.getEntity(parent)?.getComponent<ParentComponent>()?.parentId;
+        parent = world
+            .getEntity(parent)
+            ?.getComponent<ParentComponent>()
+            ?.parentId;
       }
       return false;
     }
 
-    return [for (final e in entities) if (!inside(e)) e];
+    return [
+      for (final e in entities)
+        if (!inside(e)) e,
+    ];
   }
 
   /// A copy of [entity] and of everything inside it, each moved by [edit],
@@ -275,15 +330,27 @@ abstract final class SplineEdits {
       return name;
     }
 
-    final specs = [EntitySpec.of(entity, codec, world: world).transformed(edit, newName: copyName(entity))];
+    final specs = [
+      EntitySpec.of(
+        entity,
+        codec,
+        world: world,
+      ).transformed(edit, newName: copyName(entity)),
+    ];
     final queue = [entity];
     while (queue.isNotEmpty) {
       final parent = queue.removeAt(0);
-      for (final id in parent.getComponent<ChildrenComponent>()?.childIds ?? const <EntityId>[]) {
+      for (final id
+          in parent.getComponent<ChildrenComponent>()?.childIds ??
+              const <EntityId>[]) {
         final child = world.getEntity(id);
         if (child == null) continue;
         final spec = EntitySpec.of(child, codec, world: world);
-        specs.add(spec.transformed(edit, newName: copyName(child)).under(renamed[spec.parentName] ?? spec.parentName));
+        specs.add(
+          spec
+              .transformed(edit, newName: copyName(child))
+              .under(renamed[spec.parentName] ?? spec.parentName),
+        );
         queue.add(child);
       }
     }
@@ -297,7 +364,8 @@ InspectorSection splineSection() => InspectorSection(
   id: 'worldBuilder.spline',
   order: 60,
   appliesTo: (entity) => entity.hasComponent<Spline3DComponent>(),
-  build: (context, entity, scope) => _SplineSection(entity: entity, scope: scope),
+  build: (context, entity, scope) =>
+      _SplineSection(entity: entity, scope: scope),
 );
 
 class _SplineSection extends StatefulWidget {
@@ -345,14 +413,26 @@ class _SplineSectionState extends State<_SplineSection> {
                       for (final v in _spacings)
                         editorMenuItem(v, 'Every ${_metres(v)}'),
                     ],
-                    child: Text('Every ${_metres(_spacing)}', style: InspectorField.valueStyle.copyWith(color: EditorTheme.textSecondary)),
+                    child: Text(
+                      'Every ${_metres(_spacing)}',
+                      style: InspectorField.valueStyle.copyWith(
+                        color: EditorTheme.textSecondary,
+                      ),
+                    ),
                   ),
                   EditorButton(
-                    label: others.isEmpty ? 'Select what to lay along it too' : 'Lay ${others.length} selected along it',
+                    label: others.isEmpty
+                        ? 'Select what to lay along it too'
+                        : 'Lay ${others.length} selected along it',
                     icon: Icons.linear_scale,
                     onPressed: others.isEmpty
                         ? null
-                        : () => SplineEdits.layAlong(scope, widget.entity, others, _spacing),
+                        : () => SplineEdits.layAlong(
+                            scope,
+                            widget.entity,
+                            others,
+                            _spacing,
+                          ),
                   ),
                   if (baked)
                     EditorButton(
@@ -369,5 +449,6 @@ class _SplineSectionState extends State<_SplineSection> {
     );
   }
 
-  static String _metres(double v) => v == v.roundToDouble() ? '${v.toInt()} m' : '$v m';
+  static String _metres(double v) =>
+      v == v.roundToDouble() ? '${v.toInt()} m' : '$v m';
 }

@@ -32,16 +32,16 @@ final class SweepRenderProvider extends RenderProvider<SplineSweep3DComponent> {
 
   /// How many plain colours' materials it keeps: the ones drawn last. One
   /// still drawn stays alive with what draws it.
-  static const int colourLimit = 64;
+  static const int colorLimit = 64;
 
   // Least recently used first.
-  final Map<int, GpuMaterial> _colours = {};
+  final Map<int, GpuMaterial> _colors = {};
   ModelUploader? _uploader;
   Material3DLibrary? _library;
   final Expando<Entity> _owners = Expando();
 
   /// How many plain colours' materials it keeps now.
-  int get colourCount => _colours.length;
+  int get colorCount => _colors.length;
 
   @override
   Object? revisionOf(SplineSweep3DComponent sweep) {
@@ -56,46 +56,63 @@ final class SweepRenderProvider extends RenderProvider<SplineSweep3DComponent> {
   }
 
   @override
-  void build(RenderProviderContext context, Entity entity, SplineSweep3DComponent sweep, RenderProviderOutput out) {
+  void build(
+    RenderProviderContext context,
+    Entity entity,
+    SplineSweep3DComponent sweep,
+    RenderProviderOutput out,
+  ) {
     _owners[sweep] = entity;
     final spline = entity.getComponent<Spline3DComponent>();
     if (spline == null) return;
     final mesh = SplineSweeper.meshFor(sweep, spline);
     if (mesh == null || mesh.triangleCount == 0) return;
     final primitive = context.uploader.uploadPrimitive(
-      ShapeMesh(positions: mesh.positions, normals: mesh.normals, uvs: mesh.uvs, indices: mesh.indices).toPrimitive(),
+      Shape3DMesh(
+        positions: mesh.positions,
+        normals: mesh.normals,
+        uvs: mesh.uvs,
+        indices: mesh.indices,
+      ).toPrimitive(),
     );
     _library = context.shapes.library;
     final material =
-        (sweep.material.isEmpty ? null : _library?.gpuOf(sweep.material)) ?? _colour(context, sweep.color);
+        (sweep.material.isEmpty ? null : _library?.gpuOf(sweep.material)) ??
+        _color(context, sweep.color);
     out.addMesh(primitive, material, castShadows: sweep.castShadows);
   }
 
-  GpuMaterial _colour(RenderProviderContext context, Color color) {
+  GpuMaterial _color(RenderProviderContext context, Color color) {
     // Made on one renderer's device: forgotten when another draws.
     if (!identical(_uploader, context.uploader)) {
-      _colours.clear();
+      _colors.clear();
       _uploader = context.uploader;
     }
     final key = color.toARGB32();
-    final material = _colours.remove(key) ?? context.uploader.material(materialData(color));
-    _colours[key] = material;
-    while (_colours.length > colourLimit) {
-      _colours.remove(_colours.keys.first);
+    final material =
+        _colors.remove(key) ?? context.uploader.material(materialData(color));
+    _colors[key] = material;
+    while (_colors.length > colorLimit) {
+      _colors.remove(_colors.keys.first);
     }
     return material;
   }
 
   /// A plain material of [color].
-  static MaterialData materialData(Color color) {
+  static Material3DData materialData(Color color) {
     final (r, g, b) = LinearColor.of(color);
-    return MaterialData(baseColor: (r, g, b, color.a), metallic: 0, roughness: 0.85);
+    return Material3DData(
+      baseColor: (r, g, b, color.a),
+      metallic: 0,
+      roughness: 0.85,
+    );
   }
 }
 
 /// Draws a [SplineInstances3DComponent]: its model once at each place along its
 /// spline, every part of it in one batch.
-final class InstancesRenderProvider extends RenderProvider<SplineInstances3DComponent> {
+final class InstancesRenderProvider
+    extends RenderProvider<SplineInstances3DComponent> {
   InstancesRenderProvider();
 
   Graphics3DModels? _models;
@@ -114,7 +131,12 @@ final class InstancesRenderProvider extends RenderProvider<SplineInstances3DComp
   }
 
   @override
-  void build(RenderProviderContext context, Entity entity, SplineInstances3DComponent c, RenderProviderOutput out) {
+  void build(
+    RenderProviderContext context,
+    Entity entity,
+    SplineInstances3DComponent c,
+    RenderProviderOutput out,
+  ) {
     _owners[c] = entity;
     final spline = entity.getComponent<Spline3DComponent>();
     _models = context.models;
@@ -128,7 +150,12 @@ final class InstancesRenderProvider extends RenderProvider<SplineInstances3DComp
       final cube = Cube3DComponent();
       final mesh = context.shapes.meshFor(cube, Vector3(1, 1, 1));
       if (mesh == null) return;
-      final lift = Matrix4.identity()..setFromTrs(Vector3(0, -0.5, 0), Quaternion.identity(), Vector3(1, 1, 1));
+      final lift = Matrix4.identity()
+        ..setFromTrs(
+          Vector3(0, -0.5, 0),
+          Quaternion.identity(),
+          Vector3(1, 1, 1),
+        );
       out.addBatch(
         mesh,
         context.shapes.materialFor(cube),
@@ -140,7 +167,7 @@ final class InstancesRenderProvider extends RenderProvider<SplineInstances3DComp
     }
     final model = context.models.get(c.model);
     if (model == null) return;
-    for (final part in RenderScene().addModel(model, Matrix4.identity())) {
+    for (final part in Render3DScene().addModel(model, Matrix4.identity())) {
       out.addBatch(
         part.primitive,
         part.material,
@@ -152,18 +179,31 @@ final class InstancesRenderProvider extends RenderProvider<SplineInstances3DComp
   }
 
   /// Where [c]'s copies go along [path], in its entity's space.
-  static List<Matrix4> placements(SplineInstances3DComponent c, SplinePath path) {
+  static List<Matrix4> placements(
+    SplineInstances3DComponent c,
+    SplinePath path,
+  ) {
     if (path.isEmpty) return const [];
     final spacing = math.max(c.spacing, 0.05);
     final out = <Matrix4>[];
     final end = path.closed ? path.length - spacing * 0.5 : path.length + 1e-9;
-    for (var d = math.max(0.0, c.startAt); d <= end && out.length < 10000; d += spacing) {
+    for (
+      var d = math.max(0.0, c.startAt);
+      d <= end && out.length < 10000;
+      d += spacing
+    ) {
       if (c.alignToPath) {
         out.add(path.matrixAt(d, side: c.sideOffset, scale: c.scale));
       } else {
         final f = path.at(d);
         final p = f.position + f.right * c.sideOffset;
-        out.add(Matrix4.identity()..setFromTrs(p, Quaternion.identity(), Vector3(c.scale, c.scale, c.scale)));
+        out.add(
+          Matrix4.identity()..setFromTrs(
+            p,
+            Quaternion.identity(),
+            Vector3(c.scale, c.scale, c.scale),
+          ),
+        );
       }
     }
     return out;
